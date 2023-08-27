@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from feature_selector.feature_selector_general import FeatureSelector
 from models.baseline import Baseline, BaselineFS
+from models.hamida import HamidaEtAl, HamidaFS
 from utils import camel_to_snake, count_sliding_window, grouper, sliding_window
 
 
@@ -81,7 +82,7 @@ def get_model(name, **kwargs):
     elif name == "hamida_fs":
         patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = True
-        model = HamidaFeatureSelection(
+        model = HamidaFS(
             n_bands,
             n_classes,
             lam=kwargs["lam"],
@@ -307,174 +308,6 @@ class HuEtAl(nn.Module):
         x = torch.tanh(self.fc1(x))
         x = self.fc2(x)
         return x
-
-
-class HamidaEtAl(nn.Module):
-    """
-    3-D Deep Learning Approach for Remote Sensing Image Classification
-    Amina Ben Hamida, Alexandre Benoit, Patrick Lambert, Chokri Ben Amar
-    IEEE TGRS, 2018
-    https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8344565
-    """
-
-    @staticmethod
-    def weight_init(m):
-        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv3d):
-            init.kaiming_normal_(m.weight)
-            init.zeros_(m.bias)
-
-    def __init__(self, input_channels, n_classes, patch_size=5, dilation=1):
-        super(HamidaEtAl, self).__init__()
-        # The first layer is a (3,3,3) kernel sized Conv characterized
-        # by a stride equal to 1 and number of neurons equal to 20
-        self.patch_size = patch_size
-        self.input_channels = input_channels
-        dilation = (dilation, 1, 1)
-        if patch_size == 3:
-            self.conv1 = nn.Conv3d(
-                1, 20, (3, 3, 3), stride=(1, 1, 1), dilation=dilation, padding=1
-            )
-        else:
-            self.conv1 = nn.Conv3d(
-                1, 20, (3, 3, 3), stride=(1, 1, 1), dilation=dilation, padding=0
-            )
-        # Next pooling is applied using a layer identical to the previous one
-        # with the difference of a 1D kernel size (1,1,3) and a larger stride
-        # equal to 2 in order to reduce the spectral dimension
-        self.pool1 = nn.Conv3d(
-            20, 20, (3, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0)
-        )
-        # Then, a duplicate of the first and second layers is created with
-        # 35 hidden neurons per layer.
-        self.conv2 = nn.Conv3d(
-            20, 35, (3, 3, 3), dilation=dilation, stride=(1, 1, 1), padding=(1, 0, 0)
-        )
-        self.pool2 = nn.Conv3d(
-            35, 35, (3, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0)
-        )
-        # Finally, the 1D spatial dimension is progressively reduced
-        # thanks to the use of two Conv layers, 35 neurons each,
-        # with respective kernel sizes of (1,1,3) and (1,1,2) and strides
-        # respectively equal to (1,1,1) and (1,1,2)
-        self.conv3 = nn.Conv3d(
-            35, 35, (3, 1, 1), dilation=dilation, stride=(1, 1, 1), padding=(1, 0, 0)
-        )
-        self.conv4 = nn.Conv3d(
-            35, 35, (2, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0)
-        )
-
-        # self.dropout = nn.Dropout(p=0.5)
-
-        self.features_size = self._get_final_flattened_size()
-        # The architecture ends with a fully connected layer where the number
-        # of neurons is equal to the number of input classes.
-        self.fc = nn.Linear(self.features_size, n_classes)
-
-        self.apply(self.weight_init)
-
-    def _get_final_flattened_size(self):
-        with torch.no_grad():
-            x = torch.zeros(
-                (1, 1, self.input_channels, self.patch_size, self.patch_size)
-            )
-            x = self.pool1(self.conv1(x))
-            x = self.pool2(self.conv2(x))
-            x = self.conv3(x)
-            x = self.conv4(x)
-            _, t, c, w, h = x.size()
-        return t * c * w * h
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool1(x)
-        x = F.relu(self.conv2(x))
-        x = self.pool2(x)
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
-        x = x.view(-1, self.features_size)
-        # x = self.dropout(x)
-        x = self.fc(x)
-        return x
-
-
-class HamidaFeatureSelection(HamidaEtAl):
-    def __init__(
-        self,
-        input_channels,
-        n_classes,
-        lam,
-        patch_size=5,
-        dilation=1,
-        headstart_idx=None,
-    ):
-        super(HamidaFeatureSelection, self).__init__(
-            input_channels, n_classes, patch_size, dilation
-        )
-        self.feature_selector = FeatureSelector(
-            self.input_channels, sigma=0.5, device="cuda:0", headstart_idx=headstart_idx
-        )
-        self.input_channels = input_channels
-        self.softmax = nn.Softmax()
-        self.loss = nn.CrossEntropyLoss()
-        self.reg = self.feature_selector.regularizer
-        self.lam = lam
-        self.mu = self.feature_selector.mu
-        self.sigma = self.feature_selector.sigma
-        self.test = False
-        self.k = None  # int(0.17*input_channels)
-
-    # def set_fs_device(self,device):
-    #    self.FeatureSelector = FeatureSelector(self.input_channels, sigma=0.5, device=device)
-    def forward(self, x):
-        if (
-            self.feature_selector.const_masking is None
-            and self.test
-            and self.feature_selector.mask is None
-        ):
-            self.feature_selector.set_mask(self.get_top_k_gates(self.k))
-        x = self.feature_selector.forward(x)
-        x = HamidaEtAl.forward(self=self, x=x)
-        return x
-
-    def regularization(self):
-        reg = torch.mean(self.reg((self.mu + 0.5) / self.sigma))
-        total_reg = self.lam * reg
-        return total_reg
-
-    def get_gates(self, mode):
-        if mode == "raw":
-            return self.feature_selector.mu.detach().cpu().numpy()
-        elif mode == "prob":
-            return np.minimum(
-                1.0,
-                np.maximum(0.0, self.feature_selector.mu.detach().cpu().numpy() + 0.5),
-            )
-        else:
-            raise NotImplementedError()
-
-    def get_top_k_gates(self, k):
-        gates = self.get_gates("prob")
-        print("gates", gates)
-        try:
-            print("gates>0", gates > 0)
-            print("gates>0.5", gates > 0.5)
-        except Exception as e:
-            print(e)
-        k_max_val = torch.topk(torch.from_numpy(gates), k).values[k - 1]
-        mask = torch.from_numpy(gates) > max(k_max_val, 0.5)
-        print("mask", mask)
-        return mask
-
-    def update_bands(self, bands):
-        shifted_vector = np.array(bands) - 1
-        tensor = torch.zeros(self.input_channels, dtype=torch.bool)
-        tensor[shifted_vector] = True
-        self.feature_selector.mask = tensor
-        # return tensor
-
-    # def update_headstart(self,headstart_idx):
-    #    self.feature_selector.headstart_idx_to_tensor(headstart_idx)
-    #    self.mu = self.feature_selector.mu
 
 
 class LeeEtAl(nn.Module):

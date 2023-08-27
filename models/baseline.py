@@ -55,17 +55,7 @@ class BaselineFS(Baseline, FeatureSelectionWrapper):
         headstart_idx=None,
         device="cuda:0",
     ):
-        super(Baseline, self).__init__()
-
-        self.use_dropout = dropout
-        if dropout:
-            self.dropout = nn.Dropout(p=0.5)
-        self.fc1 = nn.Linear(input_channels, 2048)
-        self.fc2 = nn.Linear(2048, 4096)
-        self.fc3 = nn.Linear(4096, 2048)
-        self.fc4 = nn.Linear(2048, n_classes)
-
-        self.apply(self.weight_init)
+        Baseline.__init__(self, input_channels, n_classes, dropout=dropout)
         FeatureSelectionWrapper.__init__(
             self,
             input_channels,
