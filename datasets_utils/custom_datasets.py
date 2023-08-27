@@ -1,7 +1,6 @@
 import cv2
-import numpy as np
 
-from utils import open_file
+from common_utils.utils import open_file
 
 CUSTOM_DATASETS_CONFIG = {
     "DFC2018_HSI": {

@@ -6,7 +6,6 @@ related helpers.
 import os
 
 import numpy as np
-import spectral
 import torch
 import torch.utils
 import torch.utils.data
@@ -20,7 +19,7 @@ except ImportError:
     # Python 2
     from urllib import urlretrieve
 
-from utils import open_file
+from common_utils.utils import open_file
 
 DATASETS_CONFIG = {
     "PaviaC": {

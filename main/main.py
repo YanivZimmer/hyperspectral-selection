@@ -14,27 +14,24 @@ For commercial use, please contact the authors.
 from __future__ import division, print_function
 
 import argparse
-import os
 
 # Numpy, scipy, scikit-image, spectral
 import numpy as np
 # Visualization
 import seaborn as sns
-import sklearn.model_selection
 import sklearn.svm
 # Torch
 import torch
 import torch.utils.data as data
 import visdom
-from skimage import io
 from torchsummary import summary
 
-from datasets import DATASETS_CONFIG, HyperX, get_dataset, open_file
+from datasets_utils.datasets import DATASETS_CONFIG, HyperX, get_dataset, open_file
 from models import get_model, save_model, test, train
-from utils import (build_dataset, compute_imf_weights, convert_from_color_,
-                   convert_to_color_, display_dataset, display_predictions,
-                   explore_spectrums, get_device, metrics, plot_spectrums,
-                   sample_gt, show_results)
+from common_utils.utils import (build_dataset, compute_imf_weights, convert_from_color_,
+                                convert_to_color_, display_dataset, display_predictions,
+                                explore_spectrums, get_device, metrics, plot_spectrums,
+                                sample_gt, show_results)
 
 dataset_names = [
     v["name"] if "name" in v.keys() else k for k, v in DATASETS_CONFIG.items()

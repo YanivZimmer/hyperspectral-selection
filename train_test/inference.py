@@ -9,9 +9,9 @@ import seaborn as sns
 import torch
 from skimage import io
 
-from datasets import open_file
+from datasets_utils.datasets import open_file
 from models import get_model, test
-from utils import convert_from_color_, convert_to_color_, get_device
+from common_utils.utils import convert_from_color_, convert_to_color_, get_device
 
 # Test options
 parser = argparse.ArgumentParser(

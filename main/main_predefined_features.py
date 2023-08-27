@@ -15,27 +15,24 @@ from __future__ import division, print_function
 
 import argparse
 import json
-import os
 
 # Numpy, scipy, scikit-image, spectral
 import numpy as np
 # Visualization
 import seaborn as sns
-import sklearn.model_selection
 import sklearn.svm
 # Torch
 import torch
 import torch.utils.data as data
 import visdom
-from skimage import io
 from torchsummary import summary
 
-from datasets import DATASETS_CONFIG, HyperX, get_dataset, open_file
-from models.models_utils import get_model, save_model, test, train
-from utils import (build_dataset, compute_imf_weights, convert_from_color_,
-                   convert_to_color_, display_dataset, display_predictions,
-                   explore_spectrums, get_device, metrics, plot_spectrums,
-                   sample_gt, show_results)
+from datasets_utils.datasets import DATASETS_CONFIG, HyperX, get_dataset, open_file
+from models import get_model, save_model, test, train
+from common_utils.utils import (build_dataset, compute_imf_weights, convert_from_color_,
+                                convert_to_color_, display_dataset, display_predictions,
+                                explore_spectrums, get_device, metrics, plot_spectrums,
+                                sample_gt, show_results)
 
 dataset_names = [
     v["name"] if "name" in v.keys() else k for k, v in DATASETS_CONFIG.items()
@@ -132,12 +129,6 @@ group_train.add_argument(
 )
 
 group_train.add_argument(
-    "--lam", type=int, help="lam for regularization in feature selection"
-)
-group_train.add_argument("--lr_factor", type=int, help="multiply lr by it")
-
-
-group_train.add_argument(
     "--patch_size",
     type=int,
     help="Size of the spatial neighbourhood (optional, if "
@@ -217,13 +208,10 @@ EPOCH = args.epoch
 # Number of epochs to run
 EPOCH2 = args.epoch_second
 
-# lam for regularization
-LAM = args.lam
-
 # Sampling mode, e.g random sampling
 SAMPLING_MODE = args.sampling_mode
 # Pre-computed weights to restore
-CHECKPOINT = None  # args.restore
+CHECKPOINT = args.restore
 # Learning rate for the SGD
 LEARNING_RATE = args.lr
 # Automated class balancing
@@ -242,15 +230,6 @@ if args.download is not None and len(args.download) > 0:
 viz = visdom.Visdom(env=DATASET + " " + MODEL)
 if not viz.check_connection:
     print("Visdom is not connected. Did you run 'python -m visdom.server' ?")
-
-
-def read_dict(filename):
-    with open(filename) as f:
-        data = f.read()
-    print("Data type before reconstruction : ", type(data))
-    # reconstructing the data as a dictionary
-    js = json.loads(data)
-    return js
 
 
 hyperparams = vars(args)
@@ -285,6 +264,15 @@ def convert_from_color(x):
     return convert_from_color_(x, palette=invert_palette)
 
 
+def read_dict(filename):
+    with open(filename) as f:
+        data = f.read()
+    print("Data type before reconstruction : ", type(data))
+    # reconstructing the data as a dictionary
+    js = json.loads(data)
+    return js
+
+
 # Instantiate the experiment based on predefined networks
 hyperparams.update(
     {
@@ -308,16 +296,22 @@ if DATAVIZ:
     plot_spectrums(mean_spectrums, viz, title="Mean spectrum/class")
 
 results = []
-all_algo_n_bands_to_selection = read_dict("algo_bands_mapping_results_temp.json")
-n_bands_to_selection = all_algo_n_bands_to_selection["WALUMI"]
 # run the experiment several times
-bands_acc_mapping = {}
-bands_f1_mapping = {}
-bands_kappa_mapping = {}
-bands_amount = range(11, 12, 5)
-for algo in all_algo_n_bands_to_selection.keys():
-    print("algo = ", algo)
-    n_bands_to_selection = all_algo_n_bands_to_selection[algo]
+bands_acc_mapping_all_algo = {}
+bands_f1_mapping_all_algo = {}
+bands_kappa_mapping_all_algo = {}
+bands_amount = range(10, 40, 5)
+all_algo_n_bands_to_selection = read_dict("../algo_bands_mapping_results_temp.json")
+# n_bands_to_selection = {15: [1, 2, 4, 5, 6, 22, 23, 33, 64, 75, 84, 89, 96, 98, 101]}
+# algo_name = "ISSC"
+# n_bands_to_selection = {int(key) : val for key, val in all_algo_n_bands_to_selection[algo_name].items()}
+for algo_name in all_algo_n_bands_to_selection.keys():
+    n_bands_to_selection = {
+        int(key): val for key, val in all_algo_n_bands_to_selection[algo_name].items()
+    }
+    bands_acc_mapping = {}
+    bands_f1_mapping = {}
+    bands_kappa_mapping = {}
     for n_selected_bands in bands_amount:
         for run in range(N_RUNS):
             if TRAIN_GT is not None and TEST_GT is not None:
@@ -411,20 +405,11 @@ for algo in all_algo_n_bands_to_selection.keys():
                 if CLASS_BALANCING:
                     weights = compute_imf_weights(train_gt, N_CLASSES, IGNORED_LABELS)
                     hyperparams["weights"] = torch.from_numpy(weights)
-
-                hyperparams["headstart_idx"] = None
-                """ n_bands_to_selection[
-                    str(n_selected_bands)
-                ]"""
-                hyperparams["lr_factor"] = args.lr_factor
                 # Neural network
                 model, optimizer, loss, hyperparams = get_model(MODEL, **hyperparams)
-                # if hasattr(model, "update_headstart"):
-                #    model.update_headstart(n_bands_to_selection[str(n_selected_bands)])
-
                 # Set number of selected features
-                if hasattr(model, "k"):
-                    model.k = n_selected_bands
+                if hasattr(model, "update_bands"):
+                    model.update_bands(n_bands_to_selection[n_selected_bands])
 
                 # Split train set in train/val
                 train_gt, val_gt = sample_gt(train_gt, 0.95, mode="random")
@@ -471,17 +456,7 @@ for algo in all_algo_n_bands_to_selection.keys():
                         val_loader=val_loader,
                         display=viz,
                     )
-                    # print("gates after 50=",model.get_gates('prob'))
                     if EPOCH2 is not None:
-                        probabilities = test(model, img, hyperparams)
-                        prediction = np.argmax(probabilities, axis=-1)
-                        run_results = metrics(
-                            prediction,
-                            test_gt,
-                            ignored_labels=hyperparams["ignored_labels"],
-                            n_classes=N_CLASSES,
-                        )
-                        print(run_results)
                         if hasattr(model, "test"):
                             model.test = True
                         train(
@@ -538,10 +513,16 @@ for algo in all_algo_n_bands_to_selection.keys():
             bands_acc_mapping[n_selected_bands] = acc
             bands_kappa_mapping[n_selected_bands] = kappa
             bands_f1_mapping[n_selected_bands] = f1score
+        print(f"bands_acc_mapping {algo_name}:=", bands_acc_mapping)
+        print(f"bands_kappa_mapping {algo_name}:=", bands_kappa_mapping)
+        print(f"bands_f1_mapping {algo_name}:=", bands_f1_mapping)
+    bands_acc_mapping_all_algo[algo_name] = bands_acc_mapping
+    bands_kappa_mapping_all_algo[algo_name] = bands_kappa_mapping
+    bands_f1_mapping_all_algo[algo_name] = bands_f1_mapping
 
-print("bands_acc_mapping:=", bands_acc_mapping)
-print("bands_kappa_mapping:=", bands_kappa_mapping)
-print("bands_f1_mapping:=", bands_f1_mapping)
+print(f"bands_acc_mapping:=", bands_acc_mapping_all_algo)
+print(f"bands_kappa_mapping:=", bands_kappa_mapping_all_algo)
+print(f"bands_f1_mapping:=", bands_f1_mapping_all_algo)
 
 
 if N_RUNS > 1:
