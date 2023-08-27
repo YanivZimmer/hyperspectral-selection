@@ -1,47 +1,52 @@
 # -*- coding: utf-8 -*-
-import random
-import numpy as np
-from sklearn.metrics import confusion_matrix
-import sklearn.model_selection
-import seaborn as sns
 import itertools
-import spectral
-import visdom
-import matplotlib.pyplot as plt
-from scipy import io, misc
-import imageio
 import os
+import random
 import re
+
+import imageio
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import sklearn.model_selection
+import spectral
 import torch
+import visdom
+from scipy import io, misc
+from sklearn.metrics import confusion_matrix
+
 
 def get_device(ordinal):
     # Use GPU ?
     if ordinal < 0:
         print("Computation on CPU")
-        device = torch.device('cpu')
+        device = torch.device("cpu")
     elif torch.cuda.is_available():
         print("Computation on CUDA GPU device {}".format(ordinal))
-        device = torch.device('cuda:{}'.format(ordinal))
+        device = torch.device("cuda:{}".format(ordinal))
     else:
-        print("/!\\ CUDA was requested but is not available! Computation will go on CPU. /!\\")
-        device = torch.device('cpu')
+        print(
+            "/!\\ CUDA was requested but is not available! Computation will go on CPU. /!\\"
+        )
+        device = torch.device("cpu")
     return device
 
 
 def open_file(dataset):
     _, ext = os.path.splitext(dataset)
     ext = ext.lower()
-    if ext == '.mat':
+    if ext == ".mat":
         # Load Matlab array
         return io.loadmat(dataset)
-    elif ext == '.tif' or ext == '.tiff':
+    elif ext == ".tif" or ext == ".tiff":
         # Load TIFF file
         return imageio.imread(dataset)
-    elif ext == '.hdr':
+    elif ext == ".hdr":
         img = spectral.open_image(dataset)
         return img.load()
     else:
         raise ValueError("Unknown file format: {}".format(ext))
+
 
 def convert_to_color_(arr_2d, palette=None):
     """Convert an array of labels to RGB color-encoded image.
@@ -90,13 +95,14 @@ def convert_from_color_(arr_3d, palette=None):
 
 def display_predictions(pred, vis, gt=None, caption=""):
     if gt is None:
-        vis.images([np.transpose(pred, (2, 0, 1))],
-                    opts={'caption': caption})
+        vis.images([np.transpose(pred, (2, 0, 1))], opts={"caption": caption})
     else:
-        vis.images([np.transpose(pred, (2, 0, 1)),
-                    np.transpose(gt, (2, 0, 1))],
-                    nrow=2,
-                    opts={'caption': caption})
+        vis.images(
+            [np.transpose(pred, (2, 0, 1)), np.transpose(gt, (2, 0, 1))],
+            nrow=2,
+            opts={"caption": caption},
+        )
+
 
 def display_dataset(img, gt, bands, labels, palette, vis):
     """Display the specified dataset.
@@ -113,16 +119,15 @@ def display_dataset(img, gt, bands, labels, palette, vis):
     print("Image has dimensions {}x{} and {} channels".format(*img.shape))
     rgb = spectral.get_rgb(img, bands)
     rgb /= np.max(rgb)
-    rgb = np.asarray(255 * rgb, dtype='uint8')
+    rgb = np.asarray(255 * rgb, dtype="uint8")
 
     # Display the RGB composite image
     caption = "RGB (bands {}, {}, {})".format(*bands)
     # send to visdom server
-    vis.images([np.transpose(rgb, (2, 0, 1))],
-                opts={'caption': caption})
+    vis.images([np.transpose(rgb, (2, 0, 1))], opts={"caption": caption})
 
-def explore_spectrums(img, complete_gt, class_names, vis,
-                      ignored_labels=None):
+
+def explore_spectrums(img, complete_gt, class_names, vis, ignored_labels=None):
     """Plot sampled spectrums with mean + std for each class.
 
     Args:
@@ -153,8 +158,9 @@ def explore_spectrums(img, complete_gt, class_names, vis,
         higher_spectrum = mean_spectrum + std_spectrum
 
         # Plot the mean spectrum with thickness based on std
-        plt.fill_between(range(len(mean_spectrum)), lower_spectrum,
-                         higher_spectrum, color="#3F5D7D")
+        plt.fill_between(
+            range(len(mean_spectrum)), lower_spectrum, higher_spectrum, color="#3F5D7D"
+        )
         plt.plot(mean_spectrum, alpha=1, color="#FFFFFF", lw=2)
         vis.matplot(plt)
         mean_spectrums[class_names[c]] = mean_spectrum
@@ -171,9 +177,15 @@ def plot_spectrums(spectrums, vis, title=""):
     win = None
     for k, v in spectrums.items():
         n_bands = len(v)
-        update = None if win is None else 'append'
-        win = vis.line(X=np.arange(n_bands), Y=v, name=k, win=win, update=update,
-                       opts={'title': title})
+        update = None if win is None else "append"
+        win = vis.line(
+            X=np.arange(n_bands),
+            Y=v,
+            name=k,
+            win=win,
+            update=update,
+            opts={"title": title},
+        )
 
 
 def build_dataset(mat, gt, ignored_labels=None):
@@ -204,7 +216,7 @@ def build_dataset(mat, gt, ignored_labels=None):
 
 
 def get_random_pos(img, window_shape):
-    """ Return the corners of a random window in the input image
+    """Return the corners of a random window in the input image
 
     Args:
         img: 2D (or more) image, e.g. RGB or grayscale image
@@ -249,13 +261,13 @@ def sliding_window(image, step=10, window_size=(20, 20), with_data=True):
             if y + h > H:
                 y = H - h
             if with_data:
-                yield image[x:x + w, y:y + h], x, y, w, h
+                yield image[x : x + w, y : y + h], x, y, w, h
             else:
                 yield x, y, w, h
 
 
 def count_sliding_window(top, step=10, window_size=(20, 20)):
-    """ Count the number of windows in an image.
+    """Count the number of windows in an image.
 
     Args:
         image: 2D+ image to slide the window on, e.g. RGB or hyperspectral, ...
@@ -269,7 +281,7 @@ def count_sliding_window(top, step=10, window_size=(20, 20)):
 
 
 def grouper(n, iterable):
-    """ Browse an iterable by grouping n elements by n elements.
+    """Browse an iterable by grouping n elements by n elements.
 
     Args:
         n: int, size of the groups
@@ -301,7 +313,7 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
     for l in ignored_labels:
         ignored_mask[target == l] = True
     ignored_mask = ~ignored_mask
-    #target = target[ignored_mask] -1
+    # target = target[ignored_mask] -1
     target = target[ignored_mask]
     prediction = prediction[ignored_mask]
 
@@ -309,10 +321,7 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
 
     n_classes = np.max(target) + 1 if n_classes is None else n_classes
 
-    cm = confusion_matrix(
-        target,
-        prediction,
-        labels=range(n_classes))
+    cm = confusion_matrix(target, prediction, labels=range(n_classes))
 
     results["Confusion matrix"] = cm
 
@@ -327,17 +336,16 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
     F1scores = np.zeros(len(cm))
     for i in range(len(cm)):
         try:
-            F1 = 2. * cm[i, i] / (np.sum(cm[i, :]) + np.sum(cm[:, i]))
+            F1 = 2.0 * cm[i, i] / (np.sum(cm[i, :]) + np.sum(cm[:, i]))
         except ZeroDivisionError:
-            F1 = 0.
+            F1 = 0.0
         F1scores[i] = F1
 
     results["F1 scores"] = F1scores
 
     # Compute kappa coefficient
     pa = np.trace(cm) / float(total)
-    pe = np.sum(np.sum(cm, axis=0) * np.sum(cm, axis=1)) / \
-        float(total * total)
+    pe = np.sum(np.sum(cm, axis=0) * np.sum(cm, axis=1)) / float(total * total)
     kappa = (pa - pe) / (1 - pe)
     results["Kappa"] = kappa
 
@@ -362,28 +370,34 @@ def show_results(results, vis, label_values=None, agregated=False):
         F1scores = results["F1 scores"]
         kappa = results["Kappa"]
 
-    #label_values = label_values[1:]
-    vis.heatmap(cm, opts={'title': "Confusion matrix", 
-                          'marginbottom': 150,
-                          'marginleft': 150,
-                          'width': 500,
-                          'height': 500,
-                          'rownames': label_values, 'columnnames': label_values})
+    # label_values = label_values[1:]
+    vis.heatmap(
+        cm,
+        opts={
+            "title": "Confusion matrix",
+            "marginbottom": 150,
+            "marginleft": 150,
+            "width": 500,
+            "height": 500,
+            "rownames": label_values,
+            "columnnames": label_values,
+        },
+    )
     text += "Confusion matrix :\n"
     text += str(cm)
     text += "---\n"
 
     if agregated:
-        text += ("Accuracy: {:.03f} +- {:.03f}\n".format(np.mean(accuracies),
-                                                         np.std(accuracies)))
+        text += "Accuracy: {:.03f} +- {:.03f}\n".format(
+            np.mean(accuracies), np.std(accuracies)
+        )
     else:
         text += "Accuracy : {:.03f}%\n".format(accuracy)
     text += "---\n"
 
     text += "F1 scores :\n"
     if agregated:
-        for label, score, std in zip(label_values, F1_scores_mean,
-                                     F1_scores_std):
+        for label, score, std in zip(label_values, F1_scores_mean, F1_scores_std):
             text += "\t{}: {:.03f} +- {:.03f}\n".format(label, score, std)
     else:
         for label, score in zip(label_values, F1scores):
@@ -391,19 +405,18 @@ def show_results(results, vis, label_values=None, agregated=False):
     text += "---\n"
 
     if agregated:
-        text += ("Kappa: {:.03f} +- {:.03f}\n".format(np.mean(kappas),
-                                                      np.std(kappas)))
+        text += "Kappa: {:.03f} +- {:.03f}\n".format(np.mean(kappas), np.std(kappas))
     else:
         text += "Kappa: {:.03f}\n".format(kappa)
 
-    vis.text(text.replace('\n', '<br/>'))
+    vis.text(text.replace("\n", "<br/>"))
     print(text)
     if agregated:
         return accuracies, kappas, F1_scores_mean
     return accuracy, kappa, F1scores
 
 
-def sample_gt(gt, train_size, mode='random'):
+def sample_gt(gt, train_size, mode="random"):
     """Extract a fixed percentage of samples from an array of labels.
 
     Args:
@@ -414,37 +427,41 @@ def sample_gt(gt, train_size, mode='random'):
 
     """
     indices = np.nonzero(gt)
-    X = list(zip(*indices)) # x,y features
-    y = gt[indices].ravel() # classes
+    X = list(zip(*indices))  # x,y features
+    y = gt[indices].ravel()  # classes
     train_gt = np.zeros_like(gt)
     test_gt = np.zeros_like(gt)
     if train_size > 1:
-       train_size = int(train_size)
-    
-    if mode == 'random':
-       train_indices, test_indices = sklearn.model_selection.train_test_split(X, train_size=train_size, stratify=y)
-       train_indices = [list(t) for t in zip(*train_indices)]
-       test_indices = [list(t) for t in zip(*test_indices)]
-       train_gt[tuple(train_indices)] = gt[tuple(train_indices)]
-       test_gt[tuple(test_indices)] = gt[tuple(test_indices)]
-    elif mode == 'fixed':
-       print("Sampling {} with train size = {}".format(mode, train_size))
-       train_indices, test_indices = [], []
-       for c in np.unique(gt):
-           if c == 0:
-              continue
-           indices = np.nonzero(gt == c)
-           X = list(zip(*indices)) # x,y features
+        train_size = int(train_size)
 
-           train, test = sklearn.model_selection.train_test_split(X, train_size=train_size)
-           train_indices += train
-           test_indices += test
-       train_indices = [list(t) for t in zip(*train_indices)]
-       test_indices = [list(t) for t in zip(*test_indices)]
-       train_gt[train_indices] = gt[train_indices]
-       test_gt[test_indices] = gt[test_indices]
+    if mode == "random":
+        train_indices, test_indices = sklearn.model_selection.train_test_split(
+            X, train_size=train_size, stratify=y
+        )
+        train_indices = [list(t) for t in zip(*train_indices)]
+        test_indices = [list(t) for t in zip(*test_indices)]
+        train_gt[tuple(train_indices)] = gt[tuple(train_indices)]
+        test_gt[tuple(test_indices)] = gt[tuple(test_indices)]
+    elif mode == "fixed":
+        print("Sampling {} with train size = {}".format(mode, train_size))
+        train_indices, test_indices = [], []
+        for c in np.unique(gt):
+            if c == 0:
+                continue
+            indices = np.nonzero(gt == c)
+            X = list(zip(*indices))  # x,y features
 
-    elif mode == 'disjoint':
+            train, test = sklearn.model_selection.train_test_split(
+                X, train_size=train_size
+            )
+            train_indices += train
+            test_indices += test
+        train_indices = [list(t) for t in zip(*train_indices)]
+        test_indices = [list(t) for t in zip(*test_indices)]
+        train_gt[train_indices] = gt[train_indices]
+        test_gt[test_indices] = gt[test_indices]
+
+    elif mode == "disjoint":
         train_gt = np.copy(gt)
         test_gt = np.copy(gt)
         for c in np.unique(gt):
@@ -468,7 +485,7 @@ def sample_gt(gt, train_size, mode='random'):
 
 
 def compute_imf_weights(ground_truth, n_classes=None, ignored_classes=[]):
-    """ Compute inverse median frequency weights for class balancing.
+    """Compute inverse median frequency weights for class balancing.
 
     For each class i, it computes its frequency f_i, i.e the ratio between
     the number of pixels from class i and the total number of pixels.
@@ -481,7 +498,7 @@ def compute_imf_weights(ground_truth, n_classes=None, ignored_classes=[]):
         n_classes: number of classes (optional, defaults to max(ground_truth))
         ignored_classes: id of classes to ignore (optional)
     Returns:
-        numpy array with the IMF coefficients 
+        numpy array with the IMF coefficients
     """
     n_classes = np.max(ground_truth) if n_classes is None else n_classes
     weights = np.zeros(n_classes)
@@ -498,9 +515,10 @@ def compute_imf_weights(ground_truth, n_classes=None, ignored_classes=[]):
     idx = np.nonzero(frequencies)
     median = np.median(frequencies[idx])
     weights[idx] = median / frequencies[idx]
-    weights[frequencies == 0] = 0.
+    weights[frequencies == 0] = 0.0
     return weights
 
+
 def camel_to_snake(name):
-    s = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s).lower()
+    s = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s).lower()

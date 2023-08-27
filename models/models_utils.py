@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
 # Torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch
-import torch.optim as optim
-from torch.nn import init
 # utils
 import math
 import os
-import datetime
-import numpy as np
-#from sklearn.externals 
+
+# from sklearn.externals
 import joblib
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.nn import init
 from tqdm import tqdm
 
-from feature_selector_general import FeatureSelector
-from utils import grouper, sliding_window, count_sliding_window,\
-                  camel_to_snake
+from feature_selector.feature_selector_general import FeatureSelector
+from models.baseline import Baseline, BaselineFS
+from utils import camel_to_snake, count_sliding_window, grouper, sliding_window
 
 
 def get_model(name, **kwargs):
@@ -32,135 +32,145 @@ def get_model(name, **kwargs):
         criterion: PyTorch loss Function
         kwargs: hyperparameters with sane defaults
     """
-    device = kwargs.setdefault('device', torch.device('cpu'))
-    n_classes = kwargs['n_classes']
-    n_bands = kwargs['n_bands']
+    device = kwargs.setdefault("device", torch.device("cpu"))
+    n_classes = kwargs["n_classes"]
+    n_bands = kwargs["n_bands"]
     weights = torch.ones(n_classes)
-    #weights[torch.LongTensor(kwargs['ignored_labels'])] = 0.
-    weights[torch.LongTensor(kwargs['ignored_labels'])] = 0.
+    # weights[torch.LongTensor(kwargs['ignored_labels'])] = 0.
+    weights[torch.LongTensor(kwargs["ignored_labels"])] = 0.0
     weights = weights.to(device)
-    weights = kwargs.setdefault('weights', weights)
+    weights = kwargs.setdefault("weights", weights)
 
-    if name == 'nn':
-        kwargs.setdefault('patch_size', 1)
+    if name == "nn":
+        kwargs.setdefault("patch_size", 1)
         center_pixel = True
-        model = Baseline(n_bands, n_classes,
-                         kwargs.setdefault('dropout', False))
-        lr = kwargs.setdefault('learning_rate', 0.0001)
+        model = Baseline(n_bands, n_classes, kwargs.setdefault("dropout", False))
+        lr = kwargs.setdefault("learning_rate", 0.0001)
         optimizer = optim.Adam(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-        kwargs.setdefault('epoch', 100)
-        kwargs.setdefault('batch_size', 100)
-    elif name == 'nn_fs':
-        kwargs.setdefault('patch_size', 1)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+        kwargs.setdefault("epoch", 100)
+        kwargs.setdefault("batch_size", 100)
+    elif name == "nn_fs":
+        kwargs.setdefault("patch_size", 1)
         center_pixel = True
-        model = BaselineFeatureSelection(n_bands, n_classes,
-                         kwargs.setdefault('dropout', False))
-        lr = kwargs.setdefault('learning_rate', 0.0001)
+        model = BaselineFS(
+            n_bands,
+            n_classes,
+            kwargs.setdefault("dropout", False),
+            headstart_idx=kwargs["headstart_idx"],
+        )
+        lr = kwargs.setdefault("learning_rate", 0.0001)
         modified_lr = [
-            {'params': list(model.parameters())[1:], 'lr': lr},
-            {'params': list(model.parameters())[:1], 'lr': kwargs['lr_factor'] * lr},
+            {"params": list(model.parameters())[1:], "lr": lr},
+            {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
         ]
         optimizer = optim.Adam(modified_lr, lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-        kwargs.setdefault('epoch', 100)
-        kwargs.setdefault('batch_size', 100)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+        kwargs.setdefault("epoch", 100)
+        kwargs.setdefault("batch_size", 100)
 
-    elif name == 'hamida':
-        patch_size = kwargs.setdefault('patch_size', 5)
+    elif name == "hamida":
+        patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = True
         model = HamidaEtAl(n_bands, n_classes, patch_size=patch_size)
-        lr = kwargs.setdefault('learning_rate', 0.01)
+        lr = kwargs.setdefault("learning_rate", 0.01)
         optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
-        #optimizer = optim.Adam(model.parameters(), lr=lr)
-        kwargs.setdefault('batch_size', 100)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-    elif name == 'hamida_fs':
-        patch_size = kwargs.setdefault('patch_size', 5)
+        # optimizer = optim.Adam(model.parameters(), lr=lr)
+        kwargs.setdefault("batch_size", 100)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "hamida_fs":
+        patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = True
-        model = HamidaFeatureSelection(n_bands, n_classes, lam=kwargs['lam'],patch_size=patch_size,headstart_idx=kwargs['headstart_idx'])
-        lr = kwargs.setdefault('learning_rate', 0.01)
-        #different learning rates ls
+        model = HamidaFeatureSelection(
+            n_bands,
+            n_classes,
+            lam=kwargs["lam"],
+            patch_size=patch_size,
+            headstart_idx=kwargs["headstart_idx"],
+        )
+        lr = kwargs.setdefault("learning_rate", 0.01)
+        # different learning rates ls
 
         modified_lr = [
-                {'params': list(model.parameters())[1:], 'lr': lr},
-                {'params': list(model.parameters())[:1], 'lr': kwargs['lr_factor']*lr},
-            ]
-        #optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
-        optimizer = optim.SGD(modified_lr,lr=lr, weight_decay=0.0005)
-        kwargs.setdefault('batch_size', 256)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-    elif name == 'lee':
-        kwargs.setdefault('epoch', 200)
-        patch_size = kwargs.setdefault('patch_size', 5)
+            {"params": list(model.parameters())[1:], "lr": lr},
+            {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
+        ]
+        # optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
+        optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
+        kwargs.setdefault("batch_size", 256)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "lee":
+        kwargs.setdefault("epoch", 200)
+        patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = False
         model = LeeEtAl(n_bands, n_classes)
-        lr = kwargs.setdefault('learning_rate', 0.001)
+        lr = kwargs.setdefault("learning_rate", 0.001)
         optimizer = optim.Adam(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-    elif name == 'lee_fs':
-        kwargs.setdefault('epoch', 200)
-        patch_size = kwargs.setdefault('patch_size', 5)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "lee_fs":
+        kwargs.setdefault("epoch", 200)
+        patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = False
         model = LeeEtAlFeatureSelection(n_bands, n_classes)
-        lr = kwargs.setdefault('learning_rate', 0.001)
+        lr = kwargs.setdefault("learning_rate", 0.001)
         optimizer = optim.Adam(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
 
-    elif name == 'chen':
-        patch_size = kwargs.setdefault('patch_size', 27)
+    elif name == "chen":
+        patch_size = kwargs.setdefault("patch_size", 27)
         center_pixel = True
         model = ChenEtAl(n_bands, n_classes, patch_size=patch_size)
-        lr = kwargs.setdefault('learning_rate', 0.003)
+        lr = kwargs.setdefault("learning_rate", 0.003)
         optimizer = optim.SGD(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-        kwargs.setdefault('epoch', 400)
-        kwargs.setdefault('batch_size', 100)
-    elif name == 'li':
-        patch_size = kwargs.setdefault('patch_size', 5)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+        kwargs.setdefault("epoch", 400)
+        kwargs.setdefault("batch_size", 100)
+    elif name == "li":
+        patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = True
         model = LiEtAl(n_bands, n_classes, n_planes=16, patch_size=patch_size)
-        lr = kwargs.setdefault('learning_rate', 0.01)
-        optimizer = optim.SGD(model.parameters(),
-                              lr=lr, momentum=0.9, weight_decay=0.0005)
-        epoch = kwargs.setdefault('epoch', 200)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-        #kwargs.setdefault('scheduler', optim.lr_scheduler.MultiStepLR(optimizer, milestones=[epoch // 2, (5 * epoch) // 6], gamma=0.1))
-    elif name == 'hu':
-        kwargs.setdefault('patch_size', 1)
+        lr = kwargs.setdefault("learning_rate", 0.01)
+        optimizer = optim.SGD(
+            model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0005
+        )
+        epoch = kwargs.setdefault("epoch", 200)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+        # kwargs.setdefault('scheduler', optim.lr_scheduler.MultiStepLR(optimizer, milestones=[epoch // 2, (5 * epoch) // 6], gamma=0.1))
+    elif name == "hu":
+        kwargs.setdefault("patch_size", 1)
         center_pixel = True
         model = HuEtAl(n_bands, n_classes)
         # From what I infer from the paper (Eq.7 and Algorithm 1), it is standard SGD with lr = 0.01
-        lr = kwargs.setdefault('learning_rate', 0.01)
+        lr = kwargs.setdefault("learning_rate", 0.01)
         optimizer = optim.SGD(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-        kwargs.setdefault('epoch', 100)
-        kwargs.setdefault('batch_size', 100)
-    elif name == 'he':
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+        kwargs.setdefault("epoch", 100)
+        kwargs.setdefault("batch_size", 100)
+    elif name == "he":
         # We train our model by AdaGrad [18] algorithm, in which
         # the base learning rate is 0.01. In addition, we set the batch
         # as 40, weight decay as 0.01 for all the layers
         # The input of our network is the HSI 3D patch in the size of 7×7×Band
-        kwargs.setdefault('patch_size', 7)
-        kwargs.setdefault('batch_size', 40)
-        lr = kwargs.setdefault('learning_rate', 0.01)
+        kwargs.setdefault("patch_size", 7)
+        kwargs.setdefault("batch_size", 40)
+        lr = kwargs.setdefault("learning_rate", 0.01)
         center_pixel = True
-        model = HeEtAl(n_bands, n_classes, patch_size=kwargs['patch_size'])
+        model = HeEtAl(n_bands, n_classes, patch_size=kwargs["patch_size"])
         # For Adagrad, we need to load the model on GPU before creating the optimizer
         model = model.to(device)
         optimizer = optim.Adagrad(model.parameters(), lr=lr, weight_decay=0.01)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-    elif name == 'luo':
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "luo":
         # All  the  experiments  are  settled  by  the  learning  rate  of  0.1,
         # the  decay  term  of  0.09  and  batch  size  of  100.
-        kwargs.setdefault('patch_size', 3)
-        kwargs.setdefault('batch_size', 100)
-        lr = kwargs.setdefault('learning_rate', 0.1)
+        kwargs.setdefault("patch_size", 3)
+        kwargs.setdefault("batch_size", 100)
+        lr = kwargs.setdefault("learning_rate", 0.1)
         center_pixel = True
-        model = LuoEtAl(n_bands, n_classes, patch_size=kwargs['patch_size'])
+        model = LuoEtAl(n_bands, n_classes, patch_size=kwargs["patch_size"])
         optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.09)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-    elif name == 'sharma':
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "sharma":
         # We train our S-CNN from scratch using stochastic gradient descent with
         # momentum set to 0.9, weight decay of 0.0005, and with a batch size
         # of 60.  We initialize an equal learning rate for all trainable layers
@@ -168,127 +178,82 @@ def get_model(name, **kwargs):
         # error stopped decreasing. Prior to the termination the learning rate was
         # reduced two times at 15th and 25th epoch. [...]
         # We trained the network for 30 epochs
-        kwargs.setdefault('batch_size', 60)
-        epoch = kwargs.setdefault('epoch', 30)
-        lr = kwargs.setdefault('lr', 0.05)
+        kwargs.setdefault("batch_size", 60)
+        epoch = kwargs.setdefault("epoch", 30)
+        lr = kwargs.setdefault("lr", 0.05)
         center_pixel = True
         # We assume patch_size = 64
-        kwargs.setdefault('patch_size', 64)
-        model = SharmaEtAl(n_bands, n_classes, patch_size=kwargs['patch_size'])
+        kwargs.setdefault("patch_size", 64)
+        model = SharmaEtAl(n_bands, n_classes, patch_size=kwargs["patch_size"])
         optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
-        kwargs.setdefault('scheduler', optim.lr_scheduler.MultiStepLR(optimizer, milestones=[epoch // 2, (5 * epoch) // 6], gamma=0.1))
-    elif name == 'liu':
-        kwargs['supervision'] = 'semi'
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+        kwargs.setdefault(
+            "scheduler",
+            optim.lr_scheduler.MultiStepLR(
+                optimizer, milestones=[epoch // 2, (5 * epoch) // 6], gamma=0.1
+            ),
+        )
+    elif name == "liu":
+        kwargs["supervision"] = "semi"
         # "The learning rate is set to 0.001 empirically. The number of epochs is set to be 40."
-        kwargs.setdefault('epoch', 40)
-        lr = kwargs.setdefault('lr', 0.001)
-        center_pixel = True 
-        patch_size = kwargs.setdefault('patch_size', 9)
+        kwargs.setdefault("epoch", 40)
+        lr = kwargs.setdefault("lr", 0.001)
+        center_pixel = True
+        patch_size = kwargs.setdefault("patch_size", 9)
         model = LiuEtAl(n_bands, n_classes, patch_size)
         optimizer = optim.SGD(model.parameters(), lr=lr)
         # "The unsupervised cost is the squared error of the difference"
-        criterion = (nn.CrossEntropyLoss(weight=kwargs['weights']), lambda rec, data: F.mse_loss(rec, data[:,:,:,patch_size//2,patch_size//2].squeeze()))
-    elif name == 'boulch':
-        kwargs['supervision'] = 'semi'
-        kwargs.setdefault('patch_size', 1)
-        kwargs.setdefault('epoch', 100)
-        lr = kwargs.setdefault('lr', 0.001)
+        criterion = (
+            nn.CrossEntropyLoss(weight=kwargs["weights"]),
+            lambda rec, data: F.mse_loss(
+                rec, data[:, :, :, patch_size // 2, patch_size // 2].squeeze()
+            ),
+        )
+    elif name == "boulch":
+        kwargs["supervision"] = "semi"
+        kwargs.setdefault("patch_size", 1)
+        kwargs.setdefault("epoch", 100)
+        lr = kwargs.setdefault("lr", 0.001)
         center_pixel = True
         model = BoulchEtAl(n_bands, n_classes)
         optimizer = optim.SGD(model.parameters(), lr=lr)
-        criterion = (nn.CrossEntropyLoss(weight=kwargs['weights']), lambda rec, data: F.mse_loss(rec, data.squeeze()))
-    elif name == 'mou':
-        kwargs.setdefault('patch_size', 1)
+        criterion = (
+            nn.CrossEntropyLoss(weight=kwargs["weights"]),
+            lambda rec, data: F.mse_loss(rec, data.squeeze()),
+        )
+    elif name == "mou":
+        kwargs.setdefault("patch_size", 1)
         center_pixel = True
-        kwargs.setdefault('epoch', 100)
+        kwargs.setdefault("epoch", 100)
         # "The RNN was trained with the Adadelta algorithm [...] We made use of a
         # fairly  high  learning  rate  of  1.0  instead  of  the  relatively  low
         # default of  0.002 to  train the  network"
-        lr = kwargs.setdefault('lr', 1.0)
+        lr = kwargs.setdefault("lr", 1.0)
         model = MouEtAl(n_bands, n_classes)
         # For Adadelta, we need to load the model on GPU before creating the optimizer
         model = model.to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
     else:
         raise KeyError("{} model is unknown.".format(name))
 
     model = model.to(device)
-    epoch = kwargs.setdefault('epoch', 100)
-    kwargs.setdefault('scheduler', optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=epoch//4, verbose=True))
-    #kwargs.setdefault('scheduler', None)
-    kwargs.setdefault('batch_size', 100)
-    kwargs.setdefault('supervision', 'full')
-    kwargs.setdefault('flip_augmentation', False)
-    kwargs.setdefault('radiation_augmentation', False)
-    kwargs.setdefault('mixture_augmentation', False)
-    kwargs['center_pixel'] = center_pixel
+    epoch = kwargs.setdefault("epoch", 100)
+    kwargs.setdefault(
+        "scheduler",
+        optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, factor=0.1, patience=epoch // 4, verbose=True
+        ),
+    )
+    # kwargs.setdefault('scheduler', None)
+    kwargs.setdefault("batch_size", 100)
+    kwargs.setdefault("supervision", "full")
+    kwargs.setdefault("flip_augmentation", False)
+    kwargs.setdefault("radiation_augmentation", False)
+    kwargs.setdefault("mixture_augmentation", False)
+    kwargs["center_pixel"] = center_pixel
     return model, optimizer, criterion, kwargs
 
-
-class Baseline(nn.Module):
-    """
-    Baseline network
-    """
-    @staticmethod
-    def weight_init(m):
-        if isinstance(m, nn.Linear):
-            init.kaiming_normal_(m.weight)
-            init.zeros_(m.bias)
-
-    def __init__(self, input_channels, n_classes, dropout=False):
-        super(Baseline, self).__init__()
-        self.use_dropout = dropout
-        if dropout:
-            self.dropout = nn.Dropout(p=0.5)
-
-        self.fc1 = nn.Linear(input_channels, 2048)
-        self.fc2 = nn.Linear(2048, 4096)
-        self.fc3 = nn.Linear(4096, 2048)
-        self.fc4 = nn.Linear(2048, n_classes)
-
-        self.apply(self.weight_init)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        if self.use_dropout:
-            x = self.dropout(x)
-        x = F.relu(self.fc2(x))
-        if self.use_dropout:
-            x = self.dropout(x)
-        x = F.relu(self.fc3(x))
-        if self.use_dropout:
-            x = self.dropout(x)
-        x = self.fc4(x)
-        return x
-
-class BaselineFeatureSelection(Baseline):
-    def __init__(self, input_channels, n_classes, dropout=False):
-        super(Baseline, self).__init__()
-        self.use_dropout = dropout
-        if dropout:
-            self.dropout = nn.Dropout(p=0.5)
-
-        self.fc1 = nn.Linear(input_channels, 2048)
-        self.fc2 = nn.Linear(2048, 4096)
-        self.fc3 = nn.Linear(4096, 2048)
-        self.fc4 = nn.Linear(2048, n_classes)
-
-        self.apply(self.weight_init)
-        self.feature_selector = FeatureSelector(input_channels, sigma=0.5, device="cuda:0",headstart_idx=None)
-        self.lam = 1
-        self.sigma = self.feature_selector.sigma
-        self.reg = self.feature_selector.regularizer
-        self.mu = self.feature_selector.mu
-    def forward(self, x):
-        x = self.feature_selector.forward(x)
-        x = Baseline.forward(self=self,x=x)
-        return x
-    def regularization(self):
-        reg = torch.mean(self.reg((self.mu + 0.5) / self.sigma))
-        total_reg = self.lam * reg
-        return total_reg
 
 class HuEtAl(nn.Module):
     """
@@ -297,6 +262,7 @@ class HuEtAl(nn.Module):
     Journal of Sensors, Volume 2015 (2015)
     https://www.hindawi.com/journals/js/2015/258619/
     """
+
     @staticmethod
     def weight_init(m):
         # [All the trainable parameters in our CNN should be initialized to
@@ -309,17 +275,17 @@ class HuEtAl(nn.Module):
         with torch.no_grad():
             x = torch.zeros(1, 1, self.input_channels)
             x = self.pool(self.conv(x))
-        return x.numel() 
+        return x.numel()
 
     def __init__(self, input_channels, n_classes, kernel_size=None, pool_size=None):
         super(HuEtAl, self).__init__()
         if kernel_size is None:
-           # [In our experiments, k1 is better to be [ceil](n1/9)]
-           kernel_size = math.ceil(input_channels / 9)
+            # [In our experiments, k1 is better to be [ceil](n1/9)]
+            kernel_size = math.ceil(input_channels / 9)
         if pool_size is None:
-           # The authors recommand that k2's value is chosen so that the pooled features have 30~40 values
-           # ceil(kernel_size/5) gives the same values as in the paper so let's assume it's okay
-           pool_size = math.ceil(kernel_size / 5)
+            # The authors recommand that k2's value is chosen so that the pooled features have 30~40 values
+            # ceil(kernel_size/5) gives the same values as in the paper so let's assume it's okay
+            pool_size = math.ceil(kernel_size / 5)
         self.input_channels = input_channels
 
         # [The first hidden convolution layer C1 filters the n1 x 1 input data with 20 kernels of size k1 x 1]
@@ -342,6 +308,7 @@ class HuEtAl(nn.Module):
         x = self.fc2(x)
         return x
 
+
 class HamidaEtAl(nn.Module):
     """
     3-D Deep Learning Approach for Remote Sensing Image Classification
@@ -349,6 +316,7 @@ class HamidaEtAl(nn.Module):
     IEEE TGRS, 2018
     https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8344565
     """
+
     @staticmethod
     def weight_init(m):
         if isinstance(m, nn.Linear) or isinstance(m, nn.Conv3d):
@@ -364,31 +332,38 @@ class HamidaEtAl(nn.Module):
         dilation = (dilation, 1, 1)
         if patch_size == 3:
             self.conv1 = nn.Conv3d(
-                1, 20, (3, 3, 3), stride=(1, 1, 1), dilation=dilation, padding=1)
+                1, 20, (3, 3, 3), stride=(1, 1, 1), dilation=dilation, padding=1
+            )
         else:
             self.conv1 = nn.Conv3d(
-                1, 20, (3, 3, 3), stride=(1, 1, 1), dilation=dilation, padding=0)
+                1, 20, (3, 3, 3), stride=(1, 1, 1), dilation=dilation, padding=0
+            )
         # Next pooling is applied using a layer identical to the previous one
         # with the difference of a 1D kernel size (1,1,3) and a larger stride
         # equal to 2 in order to reduce the spectral dimension
         self.pool1 = nn.Conv3d(
-            20, 20, (3, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0))
+            20, 20, (3, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0)
+        )
         # Then, a duplicate of the first and second layers is created with
         # 35 hidden neurons per layer.
         self.conv2 = nn.Conv3d(
-            20, 35, (3, 3, 3), dilation=dilation, stride=(1, 1, 1), padding=(1, 0, 0))
+            20, 35, (3, 3, 3), dilation=dilation, stride=(1, 1, 1), padding=(1, 0, 0)
+        )
         self.pool2 = nn.Conv3d(
-            35, 35, (3, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0))
+            35, 35, (3, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0)
+        )
         # Finally, the 1D spatial dimension is progressively reduced
         # thanks to the use of two Conv layers, 35 neurons each,
         # with respective kernel sizes of (1,1,3) and (1,1,2) and strides
         # respectively equal to (1,1,1) and (1,1,2)
         self.conv3 = nn.Conv3d(
-            35, 35, (3, 1, 1), dilation=dilation, stride=(1, 1, 1), padding=(1, 0, 0))
+            35, 35, (3, 1, 1), dilation=dilation, stride=(1, 1, 1), padding=(1, 0, 0)
+        )
         self.conv4 = nn.Conv3d(
-            35, 35, (2, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0))
+            35, 35, (2, 1, 1), dilation=dilation, stride=(2, 1, 1), padding=(1, 0, 0)
+        )
 
-        #self.dropout = nn.Dropout(p=0.5)
+        # self.dropout = nn.Dropout(p=0.5)
 
         self.features_size = self._get_final_flattened_size()
         # The architecture ends with a fully connected layer where the number
@@ -399,8 +374,9 @@ class HamidaEtAl(nn.Module):
 
     def _get_final_flattened_size(self):
         with torch.no_grad():
-            x = torch.zeros((1, 1, self.input_channels,
-                             self.patch_size, self.patch_size))
+            x = torch.zeros(
+                (1, 1, self.input_channels, self.patch_size, self.patch_size)
+            )
             x = self.pool1(self.conv1(x))
             x = self.pool2(self.conv2(x))
             x = self.conv3(x)
@@ -416,15 +392,27 @@ class HamidaEtAl(nn.Module):
         x = F.relu(self.conv3(x))
         x = F.relu(self.conv4(x))
         x = x.view(-1, self.features_size)
-        #x = self.dropout(x)
+        # x = self.dropout(x)
         x = self.fc(x)
         return x
 
 
 class HamidaFeatureSelection(HamidaEtAl):
-    def __init__(self, input_channels, n_classes,lam, patch_size=5, dilation=1,headstart_idx=None):
-        super(HamidaFeatureSelection, self).__init__(input_channels, n_classes, patch_size, dilation)
-        self.feature_selector = FeatureSelector(self.input_channels, sigma=0.5, device="cuda:0",headstart_idx=headstart_idx)
+    def __init__(
+        self,
+        input_channels,
+        n_classes,
+        lam,
+        patch_size=5,
+        dilation=1,
+        headstart_idx=None,
+    ):
+        super(HamidaFeatureSelection, self).__init__(
+            input_channels, n_classes, patch_size, dilation
+        )
+        self.feature_selector = FeatureSelector(
+            self.input_channels, sigma=0.5, device="cuda:0", headstart_idx=headstart_idx
+        )
         self.input_channels = input_channels
         self.softmax = nn.Softmax()
         self.loss = nn.CrossEntropyLoss()
@@ -433,15 +421,19 @@ class HamidaFeatureSelection(HamidaEtAl):
         self.mu = self.feature_selector.mu
         self.sigma = self.feature_selector.sigma
         self.test = False
-        self.k = None #int(0.17*input_channels)
-    #def set_fs_device(self,device):
+        self.k = None  # int(0.17*input_channels)
+
+    # def set_fs_device(self,device):
     #    self.FeatureSelector = FeatureSelector(self.input_channels, sigma=0.5, device=device)
     def forward(self, x):
-        if self.feature_selector.const_masking is None and \
-                self.test and self.feature_selector.mask is None:
-                self.feature_selector.set_mask(self.get_top_k_gates(self.k))
+        if (
+            self.feature_selector.const_masking is None
+            and self.test
+            and self.feature_selector.mask is None
+        ):
+            self.feature_selector.set_mask(self.get_top_k_gates(self.k))
         x = self.feature_selector.forward(x)
-        x = HamidaEtAl.forward(self=self,x=x)
+        x = HamidaEtAl.forward(self=self, x=x)
         return x
 
     def regularization(self):
@@ -450,36 +442,39 @@ class HamidaFeatureSelection(HamidaEtAl):
         return total_reg
 
     def get_gates(self, mode):
-        if mode == 'raw':
+        if mode == "raw":
             return self.feature_selector.mu.detach().cpu().numpy()
-        elif mode == 'prob':
-            return np.minimum(1.0, np.maximum(0.0, self.feature_selector.mu.detach().cpu().numpy() + 0.5))
+        elif mode == "prob":
+            return np.minimum(
+                1.0,
+                np.maximum(0.0, self.feature_selector.mu.detach().cpu().numpy() + 0.5),
+            )
         else:
             raise NotImplementedError()
 
-    def get_top_k_gates(self,k):
-        gates=self.get_gates("prob")
-        print("gates",gates)
+    def get_top_k_gates(self, k):
+        gates = self.get_gates("prob")
+        print("gates", gates)
         try:
-            print("gates>0",gates>0)
-            print("gates>0.5",gates>0.5)
+            print("gates>0", gates > 0)
+            print("gates>0.5", gates > 0.5)
         except Exception as e:
             print(e)
         k_max_val = torch.topk(torch.from_numpy(gates), k).values[k - 1]
-        mask = torch.from_numpy(gates) > max(k_max_val,0.5)
+        mask = torch.from_numpy(gates) > max(k_max_val, 0.5)
         print("mask", mask)
         return mask
 
-    def update_bands(self,bands):
+    def update_bands(self, bands):
         shifted_vector = np.array(bands) - 1
         tensor = torch.zeros(self.input_channels, dtype=torch.bool)
         tensor[shifted_vector] = True
         self.feature_selector.mask = tensor
-        #return tensor
-    #def update_headstart(self,headstart_idx):
+        # return tensor
+
+    # def update_headstart(self,headstart_idx):
     #    self.feature_selector.headstart_idx_to_tensor(headstart_idx)
     #    self.mu = self.feature_selector.mu
-
 
 
 class LeeEtAl(nn.Module):
@@ -488,6 +483,7 @@ class LeeEtAl(nn.Module):
     Hyungtae Lee and Heesung Kwon
     IGARSS 2016
     """
+
     @staticmethod
     def weight_init(m):
         if isinstance(m, nn.Linear) or isinstance(m, nn.Conv3d):
@@ -501,9 +497,11 @@ class LeeEtAl(nn.Module):
         # image with two convolutional filters with different sizes
         # (1x1xB and 3x3xB where B is the number of spectral bands)
         self.conv_3x3 = nn.Conv3d(
-            1, 128, (in_channels, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
+            1, 128, (in_channels, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1)
+        )
         self.conv_1x1 = nn.Conv3d(
-            1, 128, (in_channels, 1, 1), stride=(1, 1, 1), padding=0)
+            1, 128, (in_channels, 1, 1), stride=(1, 1, 1), padding=0
+        )
 
         # We use two modules from the residual learning approach
         # Residual block 1
@@ -568,17 +566,20 @@ class LeeEtAlFeatureSelection(LeeEtAl):
     def __init__(self, input_channels, n_classes):
         super(LeeEtAlFeatureSelection, self).__init__(input_channels, n_classes)
         self.input_channels = input_channels
-        self.feature_selector = FeatureSelector(self.input_channels, sigma=0.25, device="cuda:0")
+        self.feature_selector = FeatureSelector(
+            self.input_channels, sigma=0.25, device="cuda:0"
+        )
         self.softmax = nn.Softmax()
         self.loss = nn.CrossEntropyLoss()
         self.reg = self.feature_selector.regularizer
-        self.lam = 1.25#0.75
+        self.lam = 1.25  # 0.75
         self.mu = self.feature_selector.mu
         self.sigma = self.feature_selector.sigma
         self.test = False
-        self.k = int(0.4*input_channels)
+        self.k = int(0.4 * input_channels)
         self.mask = None
-    #def set_fs_device(self,device):
+
+    # def set_fs_device(self,device):
     #    self.FeatureSelector = FeatureSelector(self.input_channels, sigma=0.5, device=device)
 
     def forward(self, x):
@@ -593,17 +594,22 @@ class LeeEtAlFeatureSelection(LeeEtAl):
         return self.lam * reg
 
     def get_gates(self, mode):
-        if mode == 'raw':
+        if mode == "raw":
             return self.feature_selector.mu.detach().cpu().numpy()
-        elif mode == 'prob':
-            return np.minimum(1.0, np.maximum(0.0, self.feature_selector.mu.detach().cpu().numpy() + 0.5))
+        elif mode == "prob":
+            return np.minimum(
+                1.0,
+                np.maximum(0.0, self.feature_selector.mu.detach().cpu().numpy() + 0.5),
+            )
         else:
             raise NotImplementedError()
-    def get_top_k_gates(self,k):
-        gates=self.get_gates("prob")
+
+    def get_top_k_gates(self, k):
+        gates = self.get_gates("prob")
         k_max_val = torch.topk(torch.from_numpy(gates), k).values[k - 1]
         mask = torch.from_numpy(gates) > k_max_val
         return mask
+
 
 class ChenEtAl(nn.Module):
     """
@@ -612,6 +618,7 @@ class ChenEtAl(nn.Module):
     Yushi Chen, Hanlu Jiang, Chunyang Li, Xiuping Jia and Pedram Ghamisi
     IEEE Transactions on Geoscience and Remote Sensing (TGRS), 2017
     """
+
     @staticmethod
     def weight_init(m):
         # In the beginning, the weights are randomly initialized
@@ -642,8 +649,9 @@ class ChenEtAl(nn.Module):
 
     def _get_final_flattened_size(self):
         with torch.no_grad():
-            x = torch.zeros((1, 1, self.input_channels,
-                             self.patch_size, self.patch_size))
+            x = torch.zeros(
+                (1, 1, self.input_channels, self.patch_size, self.patch_size)
+            )
             x = self.pool1(self.conv1(x))
             x = self.pool2(self.conv2(x))
             x = self.conv3(x)
@@ -672,6 +680,7 @@ class LiEtAl(nn.Module):
     MDPI Remote Sensing, 2017
     http://www.mdpi.com/2072-4292/9/1/67
     """
+
     @staticmethod
     def weight_init(m):
         if isinstance(m, nn.Linear) or isinstance(m, nn.Conv3d):
@@ -693,9 +702,8 @@ class LiEtAl(nn.Module):
         self.conv1 = nn.Conv3d(1, n_planes, (7, 3, 3), padding=(1, 0, 0))
         # the number of kernels in the second convolution layer is set to be
         # twice as many as that in the first convolution layer
-        self.conv2 = nn.Conv3d(n_planes, 2 * n_planes,
-                               (3, 3, 3), padding=(1, 0, 0))
-        #self.dropout = nn.Dropout(p=0.5)
+        self.conv2 = nn.Conv3d(n_planes, 2 * n_planes, (3, 3, 3), padding=(1, 0, 0))
+        # self.dropout = nn.Dropout(p=0.5)
         self.features_size = self._get_final_flattened_size()
 
         self.fc = nn.Linear(self.features_size, n_classes)
@@ -704,8 +712,9 @@ class LiEtAl(nn.Module):
 
     def _get_final_flattened_size(self):
         with torch.no_grad():
-            x = torch.zeros((1, 1, self.input_channels,
-                             self.patch_size, self.patch_size))
+            x = torch.zeros(
+                (1, 1, self.input_channels, self.patch_size, self.patch_size)
+            )
             x = self.conv1(x)
             x = self.conv2(x)
             _, t, c, w, h = x.size()
@@ -715,9 +724,10 @@ class LiEtAl(nn.Module):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(-1, self.features_size)
-        #x = self.dropout(x)
+        # x = self.dropout(x)
         x = self.fc(x)
         return x
+
 
 class HeEtAl(nn.Module):
     """
@@ -739,17 +749,17 @@ class HeEtAl(nn.Module):
         self.input_channels = input_channels
         self.patch_size = patch_size
 
-        self.conv1 = nn.Conv3d(1, 16, (11, 3, 3), stride=(3,1,1))
-        self.conv2_1 = nn.Conv3d(16, 16, (1, 1, 1), padding=(0,0,0))
-        self.conv2_2 = nn.Conv3d(16, 16, (3, 1, 1), padding=(1,0,0))
-        self.conv2_3 = nn.Conv3d(16, 16, (5, 1, 1), padding=(2,0,0))
-        self.conv2_4 = nn.Conv3d(16, 16, (11, 1, 1), padding=(5,0,0))
-        self.conv3_1 = nn.Conv3d(16, 16, (1, 1, 1), padding=(0,0,0))
-        self.conv3_2 = nn.Conv3d(16, 16, (3, 1, 1), padding=(1,0,0))
-        self.conv3_3 = nn.Conv3d(16, 16, (5, 1, 1), padding=(2,0,0))
-        self.conv3_4 = nn.Conv3d(16, 16, (11, 1, 1), padding=(5,0,0))
+        self.conv1 = nn.Conv3d(1, 16, (11, 3, 3), stride=(3, 1, 1))
+        self.conv2_1 = nn.Conv3d(16, 16, (1, 1, 1), padding=(0, 0, 0))
+        self.conv2_2 = nn.Conv3d(16, 16, (3, 1, 1), padding=(1, 0, 0))
+        self.conv2_3 = nn.Conv3d(16, 16, (5, 1, 1), padding=(2, 0, 0))
+        self.conv2_4 = nn.Conv3d(16, 16, (11, 1, 1), padding=(5, 0, 0))
+        self.conv3_1 = nn.Conv3d(16, 16, (1, 1, 1), padding=(0, 0, 0))
+        self.conv3_2 = nn.Conv3d(16, 16, (3, 1, 1), padding=(1, 0, 0))
+        self.conv3_3 = nn.Conv3d(16, 16, (5, 1, 1), padding=(2, 0, 0))
+        self.conv3_4 = nn.Conv3d(16, 16, (11, 1, 1), padding=(5, 0, 0))
         self.conv4 = nn.Conv3d(16, 16, (3, 2, 2))
-        self.pooling = nn.MaxPool2d((3,2,2), stride=(3,2,2))
+        self.pooling = nn.MaxPool2d((3, 2, 2), stride=(3, 2, 2))
         # the ratio of dropout is 0.6 in our experiments
         self.dropout = nn.Dropout(p=0.6)
 
@@ -761,8 +771,9 @@ class HeEtAl(nn.Module):
 
     def _get_final_flattened_size(self):
         with torch.no_grad():
-            x = torch.zeros((1, 1, self.input_channels,
-                             self.patch_size, self.patch_size))
+            x = torch.zeros(
+                (1, 1, self.input_channels, self.patch_size, self.patch_size)
+            )
             x = self.conv1(x)
             x2_1 = self.conv2_1(x)
             x2_2 = self.conv2_2(x)
@@ -798,6 +809,7 @@ class HeEtAl(nn.Module):
         x = self.fc(x)
         return x
 
+
 class LuoEtAl(nn.Module):
     """
     HSI-CNN: A Novel Convolution Neural Network for Hyperspectral Image
@@ -819,13 +831,13 @@ class LuoEtAl(nn.Module):
 
         # the 8-neighbor pixels [...] are fed into the Conv1 convolved by n1 kernels
         # and s1 stride. Conv1 results are feature vectors each with height of and
-        # the width is 1. After reshape layer, the feature vectors becomes an image-like 
+        # the width is 1. After reshape layer, the feature vectors becomes an image-like
         # 2-dimension data.
         # Conv2 has 64 kernels size of 3x3, with stride s2.
-        # After that, the 64 results are drawn into a vector as the input of the fully 
+        # After that, the 64 results are drawn into a vector as the input of the fully
         # connected layer FC1 which has n4 nodes.
         # In the four datasets, the kernel height nk1 is 24 and stride s1, s2 is 9 and 1
-        self.conv1 = nn.Conv3d(1, 90, (24, 3, 3), padding=0, stride=(9,1,1))
+        self.conv1 = nn.Conv3d(1, 90, (24, 3, 3), padding=0, stride=(9, 1, 1))
         self.conv2 = nn.Conv2d(1, 64, (3, 3), stride=(1, 1))
 
         self.features_size = self._get_final_flattened_size()
@@ -837,8 +849,9 @@ class LuoEtAl(nn.Module):
 
     def _get_final_flattened_size(self):
         with torch.no_grad():
-            x = torch.zeros((1, 1, self.input_channels,
-                             self.patch_size, self.patch_size))
+            x = torch.zeros(
+                (1, 1, self.input_channels, self.patch_size, self.patch_size)
+            )
             x = self.conv1(x)
             b = x.size(0)
             x = x.view(b, 1, -1, self.n_planes)
@@ -878,15 +891,15 @@ class SharmaEtAl(nn.Module):
 
         # An input image of size 263x263 pixels is fed to conv1
         # with 96 kernels of size 6x6x96 with a stride of 2 pixels
-        self.conv1 = nn.Conv3d(1, 96, (input_channels, 6, 6), stride=(1,2,2))
+        self.conv1 = nn.Conv3d(1, 96, (input_channels, 6, 6), stride=(1, 2, 2))
         self.conv1_bn = nn.BatchNorm3d(96)
         self.pool1 = nn.MaxPool3d((1, 2, 2))
         #  256 kernels of size 3x3x256 with a stride of 2 pixels
-        self.conv2 = nn.Conv3d(1, 256, (96, 3, 3), stride=(1,2,2))
+        self.conv2 = nn.Conv3d(1, 256, (96, 3, 3), stride=(1, 2, 2))
         self.conv2_bn = nn.BatchNorm3d(256)
         self.pool2 = nn.MaxPool3d((1, 2, 2))
         # 512 kernels of size 3x3x512 with a stride of 1 pixel
-        self.conv3 = nn.Conv3d(1, 512, (256, 3, 3), stride=(1,1,1))
+        self.conv3 = nn.Conv3d(1, 512, (256, 3, 3), stride=(1, 1, 1))
         # Considering those large kernel values, I assume they actually merge the
         # 3D tensors at each step
 
@@ -902,18 +915,19 @@ class SharmaEtAl(nn.Module):
 
     def _get_final_flattened_size(self):
         with torch.no_grad():
-            x = torch.zeros((1, 1, self.input_channels,
-                             self.patch_size, self.patch_size))
+            x = torch.zeros(
+                (1, 1, self.input_channels, self.patch_size, self.patch_size)
+            )
             x = F.relu(self.conv1_bn(self.conv1(x)))
             x = self.pool1(x)
             print(x.size())
             b, t, c, w, h = x.size()
-            x = x.view(b, 1, t*c, w, h) 
+            x = x.view(b, 1, t * c, w, h)
             x = F.relu(self.conv2_bn(self.conv2(x)))
             x = self.pool2(x)
             print(x.size())
             b, t, c, w, h = x.size()
-            x = x.view(b, 1, t*c, w, h) 
+            x = x.view(b, 1, t * c, w, h)
             x = F.relu(self.conv3(x))
             print(x.size())
             _, t, c, w, h = x.size()
@@ -923,11 +937,11 @@ class SharmaEtAl(nn.Module):
         x = F.relu(self.conv1_bn(self.conv1(x)))
         x = self.pool1(x)
         b, t, c, w, h = x.size()
-        x = x.view(b, 1, t*c, w, h) 
+        x = x.view(b, 1, t * c, w, h)
         x = F.relu(self.conv2_bn(self.conv2(x)))
         x = self.pool2(x)
         b, t, c, w, h = x.size()
-        x = x.view(b, 1, t*c, w, h) 
+        x = x.view(b, 1, t * c, w, h)
         x = F.relu(self.conv3(x))
         x = x.view(-1, self.features_size)
         x = self.fc1(x)
@@ -954,7 +968,7 @@ class LiuEtAl(nn.Module):
         self.input_channels = input_channels
         self.patch_size = patch_size
         self.aux_loss_weight = 1
-        
+
         # "W1 is a 3x3xB1 kernel [...] B1 is the number of the output bands for the convolutional
         # "and pooling layer" -> actually 3x3 2D convolutions with B1 outputs
         # "the value of B1 is set to be 80"
@@ -978,8 +992,7 @@ class LiuEtAl(nn.Module):
         self.apply(self.weight_init)
 
     def _get_sizes(self):
-        x = torch.zeros((1, self.input_channels,
-                         self.patch_size, self.patch_size))
+        x = torch.zeros((1, self.input_channels, self.patch_size, self.patch_size))
         x = F.relu(self.conv1_bn(self.conv1(x)))
         _, c, w, h = x.size()
         size0 = c * w * h
@@ -1005,10 +1018,14 @@ class LiuEtAl(nn.Module):
 
         x_classif = self.fc_enc(x)
 
-        #x = F.relu(self.fc1_dec_bn(self.fc1_dec(x) + x_enc))
+        # x = F.relu(self.fc1_dec_bn(self.fc1_dec(x) + x_enc))
         x = F.relu(self.fc1_dec(x))
-        x = F.relu(self.fc2_dec_bn(self.fc2_dec(x) + x_pool1.view(-1, self.features_sizes[1])))
-        x = F.relu(self.fc3_dec_bn(self.fc3_dec(x) +x_conv1.view(-1, self.features_sizes[0])))
+        x = F.relu(
+            self.fc2_dec_bn(self.fc2_dec(x) + x_pool1.view(-1, self.features_sizes[1]))
+        )
+        x = F.relu(
+            self.fc3_dec_bn(self.fc3_dec(x) + x_conv1.view(-1, self.features_sizes[0]))
+        )
         x = self.fc4_dec(x)
         return x_classif, x
 
@@ -1030,13 +1047,13 @@ class BoulchEtAl(nn.Module):
         super(BoulchEtAl, self).__init__()
         self.input_channels = input_channels
         self.aux_loss_weight = 0.1
-        
+
         encoder_modules = []
         n = input_channels
         with torch.no_grad():
             x = torch.zeros((10, 1, self.input_channels))
             print(x.size())
-            while(n > 1):
+            while n > 1:
                 print("---------- {} ---------".format(n))
                 if n == input_channels:
                     p1, p2 = 1, 2 * planes
@@ -1072,7 +1089,7 @@ class BoulchEtAl(nn.Module):
             x = torch.zeros((10, 1, self.input_channels))
             x = self.encoder(x)
             _, c, w = x.size()
-        return c*w
+        return c * w
 
     def forward(self, x):
         x = x.unsqueeze(1)
@@ -1089,9 +1106,10 @@ class MouEtAl(nn.Module):
     Lichao Mou, Pedram Ghamisi, Xiao Xang Zhu
     https://ieeexplore.ieee.org/document/7914752/
     """
+
     @staticmethod
     def weight_init(m):
- # All weight matrices in our RNN and bias vectors are initialized with a uniform distribution, and the values of these weight matrices and bias vectors are initialized in the range [−0.1,0.1]
+        # All weight matrices in our RNN and bias vectors are initialized with a uniform distribution, and the values of these weight matrices and bias vectors are initialized in the range [−0.1,0.1]
         if isinstance(m, (nn.Linear, nn.GRU)):
             init.uniform_(m.weight.data, -0.1, 0.1)
             init.uniform_(m.bias.data, -0.1, 0.1)
@@ -1100,19 +1118,19 @@ class MouEtAl(nn.Module):
         # The proposed network model uses a single recurrent layer that adopts our modified GRUs of size 64 with sigmoid gate activation and PRetanh activation functions for hidden representations
         super(MouEtAl, self).__init__()
         self.input_channels = input_channels
-        self.gru = nn.GRU(1, 64, 1, bidirectional=False) # TODO: try to change this ?
-        self.gru_bn = nn.BatchNorm1d(64*input_channels)
+        self.gru = nn.GRU(1, 64, 1, bidirectional=False)  # TODO: try to change this ?
+        self.gru_bn = nn.BatchNorm1d(64 * input_channels)
         self.tanh = nn.Tanh()
-        self.fc = nn.Linear(64*input_channels, n_classes)
+        self.fc = nn.Linear(64 * input_channels, n_classes)
 
     def forward(self, x):
         x = x.squeeze()
         x = x.unsqueeze(0)
         # x is in 1, N, C but we expect C, N, 1 for GRU layer
-        x = x.permute(2, 1,0)
+        x = x.permute(2, 1, 0)
         x = self.gru(x)[0]
         # x is in C, N, 64, we permute back
-        x = x.permute(1,2,0).contiguous()
+        x = x.permute(1, 2, 0).contiguous()
         x = x.view(x.size(0), -1)
         x = self.gru_bn(x)
         x = self.tanh(x)
@@ -1120,9 +1138,19 @@ class MouEtAl(nn.Module):
         return x
 
 
-def train(net, optimizer, criterion, data_loader, epoch, scheduler=None,
-          display_iter=100, device=torch.device('cpu'), display=None,
-          val_loader=None, supervision='full'):
+def train(
+    net,
+    optimizer,
+    criterion,
+    data_loader,
+    epoch,
+    scheduler=None,
+    display_iter=100,
+    device=torch.device("cpu"),
+    display=None,
+    val_loader=None,
+    supervision="full",
+):
     """
     Training loop to optimize a network for several epochs and a specified loss
 
@@ -1150,7 +1178,6 @@ def train(net, optimizer, criterion, data_loader, epoch, scheduler=None,
 
     save_epoch = epoch // 20 if epoch > 20 else 1
 
-
     losses = np.zeros(1000000)
     regs = np.zeros(1000000)
     mean_losses = np.zeros(100000000)
@@ -1163,73 +1190,90 @@ def train(net, optimizer, criterion, data_loader, epoch, scheduler=None,
 
         # Set the network to training mode
         net.train()
-        avg_loss = 0.
+        avg_loss = 0.0
 
         # Run the training loop for one epoch
-        for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader),disable=True):
+        for batch_idx, (data, target) in tqdm(
+            enumerate(data_loader), total=len(data_loader), disable=True
+        ):
             # Load the data into the GPU if required
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             reg = 0
-            if supervision == 'full':
+            if supervision == "full":
                 output = net(data)
-                #target = target - 1
+                # target = target - 1
                 loss = criterion(output, target)
                 if hasattr(net, "regularization"):
                     reg = net.regularization()
-                    #TODO add rego
-                    #if hasattr(net, "regularization"):
+                    # TODO add rego
+                    # if hasattr(net, "regularization"):
                     #    reg = net.regularization()
                     #    print("reg",reg.item(),"pure loss",loss)
-                    print("reg",reg.item(),"loss",loss.item())
+                    print("reg", reg.item(), "loss", loss.item())
                     loss = loss + reg
-            elif supervision == 'semi':
+            elif supervision == "semi":
                 outs = net(data)
                 output, rec = outs
-                #target = target - 1
-                loss = criterion[0](output, target) + net.aux_loss_weight * criterion[1](rec, data)
+                # target = target - 1
+                loss = criterion[0](output, target) + net.aux_loss_weight * criterion[
+                    1
+                ](rec, data)
             else:
-                raise ValueError("supervision mode \"{}\" is unknown.".format(supervision))
+                raise ValueError(
+                    'supervision mode "{}" is unknown.'.format(supervision)
+                )
             loss.backward()
             optimizer.step()
 
             avg_loss += loss.item()
             losses[iter_] = loss.item()
-            mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_ + 1])
+            mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100) : iter_ + 1])
             regs[iter_] = reg
-            mean_regs[iter_] = np.mean(regs[max(0, iter_ - 100):iter_ + 1])
+            mean_regs[iter_] = np.mean(regs[max(0, iter_ - 100) : iter_ + 1])
 
             if display_iter and iter_ % display_iter == 0:
-                string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f}'
+                string = (
+                    "Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f}"
+                )
                 string = string.format(
-                    e, epoch, batch_idx *
-                    len(data), len(data) * len(data_loader),
-                    100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_])
-                update = None if loss_win is None else 'append'
+                    e,
+                    epoch,
+                    batch_idx * len(data),
+                    len(data) * len(data_loader),
+                    100.0 * batch_idx / len(data_loader),
+                    mean_losses[iter_],
+                    mean_regs[iter_],
+                )
+                update = None if loss_win is None else "append"
                 loss_win = display.line(
                     X=np.arange(iter_ - display_iter, iter_),
-                    Y=mean_losses[iter_ - display_iter:iter_],
+                    Y=mean_losses[iter_ - display_iter : iter_],
                     win=loss_win,
                     update=update,
-                    opts={'title': "Training loss",
-                          'xlabel': "Iterations",
-                          'ylabel': "Loss"
-                         }
+                    opts={
+                        "title": "Training loss",
+                        "xlabel": "Iterations",
+                        "ylabel": "Loss",
+                    },
                 )
                 tqdm.write(string)
                 if hasattr(net, "feature_selector"):
-                    print(net.feature_selector.get_gates('prob'))
+                    print(net.feature_selector.get_gates("prob"))
 
                 if len(val_accuracies) > 0:
-                    val_win = display.line(Y=np.array(val_accuracies),
-                                           X=np.arange(len(val_accuracies)),
-                                           win=val_win,
-                                           opts={'title': "Validation accuracy",
-                                                 'xlabel': "Epochs",
-                                                 'ylabel': "Accuracy"
-                                                })
+                    val_win = display.line(
+                        Y=np.array(val_accuracies),
+                        X=np.arange(len(val_accuracies)),
+                        win=val_win,
+                        opts={
+                            "title": "Validation accuracy",
+                            "xlabel": "Epochs",
+                            "ylabel": "Accuracy",
+                        },
+                    )
             iter_ += 1
-            del(data, target, loss, output)
+            del (data, target, loss, output)
 
         # Update the scheduler
         avg_loss /= len(data_loader)
@@ -1247,20 +1291,27 @@ def train(net, optimizer, criterion, data_loader, epoch, scheduler=None,
 
         # Save the weights
         if e % save_epoch == 0:
-            save_model(net, camel_to_snake(str(net.__class__.__name__)), data_loader.dataset.name, epoch=e, metric=abs(metric))
+            save_model(
+                net,
+                camel_to_snake(str(net.__class__.__name__)),
+                data_loader.dataset.name,
+                epoch=e,
+                metric=abs(metric),
+            )
+
 
 def save_model(model, model_name, dataset_name, **kwargs):
-     model_dir = './checkpoints/' + model_name + "/" + dataset_name + "/"
-     if not os.path.isdir(model_dir):
-         os.makedirs(model_dir, exist_ok=True)
-     if isinstance(model, torch.nn.Module):
-         filename = str('run') + "_epoch{epoch}_{metric:.2f}".format(**kwargs)
-         tqdm.write("Saving neural network weights in {}".format(filename))
-         torch.save(model.state_dict(), model_dir + filename + '.pth')
-     else:
-         filename = str('run')
-         tqdm.write("Saving model params in {}".format(filename))
-         joblib.dump(model, model_dir + filename + '.pkl')
+    model_dir = "./checkpoints/" + model_name + "/" + dataset_name + "/"
+    if not os.path.isdir(model_dir):
+        os.makedirs(model_dir, exist_ok=True)
+    if isinstance(model, torch.nn.Module):
+        filename = str("run") + "_epoch{epoch}_{metric:.2f}".format(**kwargs)
+        tqdm.write("Saving neural network weights in {}".format(filename))
+        torch.save(model.state_dict(), model_dir + filename + ".pth")
+    else:
+        filename = str("run")
+        tqdm.write("Saving model params in {}".format(filename))
+        joblib.dump(model, model_dir + filename + ".pkl")
 
 
 def test(net, img, hyperparams):
@@ -1268,19 +1319,23 @@ def test(net, img, hyperparams):
     Test a model on a specific image
     """
     net.eval()
-    patch_size = hyperparams['patch_size']
-    center_pixel = hyperparams['center_pixel']
-    batch_size, device = hyperparams['batch_size'], hyperparams['device']
-    n_classes = hyperparams['n_classes']
+    patch_size = hyperparams["patch_size"]
+    center_pixel = hyperparams["center_pixel"]
+    batch_size, device = hyperparams["batch_size"], hyperparams["device"]
+    n_classes = hyperparams["n_classes"]
 
-    kwargs = {'step': hyperparams['test_stride'], 'window_size': (patch_size, patch_size)}
+    kwargs = {
+        "step": hyperparams["test_stride"],
+        "window_size": (patch_size, patch_size),
+    }
     probs = np.zeros(img.shape[:2] + (n_classes,))
 
     iterations = count_sliding_window(img, **kwargs) // batch_size
-    for batch in tqdm(grouper(batch_size, sliding_window(img, **kwargs)),
-                      total=(iterations),
-                      desc="Inference on the image"
-                      ):
+    for batch in tqdm(
+        grouper(batch_size, sliding_window(img, **kwargs)),
+        total=(iterations),
+        desc="Inference on the image",
+    ):
         with torch.no_grad():
             if patch_size == 1:
                 data = [b[0][0, 0] for b in batch]
@@ -1298,7 +1353,7 @@ def test(net, img, hyperparams):
             output = net(data)
             if isinstance(output, tuple):
                 output = output[0]
-            output = output.to('cpu')
+            output = output.to("cpu")
 
             if patch_size == 1 or center_pixel:
                 output = output.numpy()
@@ -1308,25 +1363,26 @@ def test(net, img, hyperparams):
                 if center_pixel:
                     probs[x + w // 2, y + h // 2] += out
                 else:
-                    probs[x:x + w, y:y + h] += out
+                    probs[x : x + w, y : y + h] += out
     return probs
 
-def val(net, data_loader, device='cpu', supervision='full'):
-# TODO : fix me using metrics()
+
+def val(net, data_loader, device="cpu", supervision="full"):
+    # TODO : fix me using metrics()
     net.eval()
-    accuracy, total = 0., 0.
+    accuracy, total = 0.0, 0.0
     ignored_labels = data_loader.dataset.ignored_labels
     for batch_idx, (data, target) in enumerate(data_loader):
         with torch.no_grad():
             # Load the data into the GPU if required
             data, target = data.to(device), target.to(device)
-            if supervision == 'full':
+            if supervision == "full":
                 output = net(data)
-            elif supervision == 'semi':
+            elif supervision == "semi":
                 outs = net(data)
                 output, rec = outs
             _, output = torch.max(output, dim=1)
-            #target = target - 1
+            # target = target - 1
             for pred, out in zip(output.view(-1), target.view(-1)):
                 if out.item() in ignored_labels:
                     continue
