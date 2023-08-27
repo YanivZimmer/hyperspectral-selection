@@ -51,6 +51,21 @@ def get_model(name, **kwargs):
         criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
         kwargs.setdefault('epoch', 100)
         kwargs.setdefault('batch_size', 100)
+    elif name == 'nn_fs':
+        kwargs.setdefault('patch_size', 1)
+        center_pixel = True
+        model = BaselineFeatureSelection(n_bands, n_classes,
+                         kwargs.setdefault('dropout', False))
+        lr = kwargs.setdefault('learning_rate', 0.0001)
+        modified_lr = [
+            {'params': list(model.parameters())[1:], 'lr': lr},
+            {'params': list(model.parameters())[:1], 'lr': kwargs['lr_factor'] * lr},
+        ]
+        optimizer = optim.Adam(modified_lr, lr=lr)
+        criterion = nn.CrossEntropyLoss(weight=kwargs['weights'])
+        kwargs.setdefault('epoch', 100)
+        kwargs.setdefault('batch_size', 100)
+
     elif name == 'hamida':
         patch_size = kwargs.setdefault('patch_size', 5)
         center_pixel = True
@@ -247,6 +262,33 @@ class Baseline(nn.Module):
             x = self.dropout(x)
         x = self.fc4(x)
         return x
+
+class BaselineFeatureSelection(Baseline):
+    def __init__(self, input_channels, n_classes, dropout=False):
+        super(Baseline, self).__init__()
+        self.use_dropout = dropout
+        if dropout:
+            self.dropout = nn.Dropout(p=0.5)
+
+        self.fc1 = nn.Linear(input_channels, 2048)
+        self.fc2 = nn.Linear(2048, 4096)
+        self.fc3 = nn.Linear(4096, 2048)
+        self.fc4 = nn.Linear(2048, n_classes)
+
+        self.apply(self.weight_init)
+        self.feature_selector = FeatureSelector(input_channels, sigma=0.5, device="cuda:0",headstart_idx=None)
+        self.lam = 1
+        self.sigma = self.feature_selector.sigma
+        self.reg = self.feature_selector.regularizer
+        self.mu = self.feature_selector.mu
+    def forward(self, x):
+        x = self.feature_selector.forward(x)
+        x = Baseline.forward(self=self,x=x)
+        return x
+    def regularization(self):
+        reg = torch.mean(self.reg((self.mu + 0.5) / self.sigma))
+        total_reg = self.lam * reg
+        return total_reg
 
 class HuEtAl(nn.Module):
     """
@@ -1133,13 +1175,14 @@ def train(net, optimizer, criterion, data_loader, epoch, scheduler=None,
                 output = net(data)
                 #target = target - 1
                 loss = criterion(output, target)
-                reg = net.regularization()
-                #TODO add rego
-                #if hasattr(net, "regularization"):
-                #    reg = net.regularization()
-                #    print("reg",reg.item(),"pure loss",loss)
-                print("reg",reg.item(),"loss",loss.item())
-                loss = loss + reg
+                if hasattr(net, "regularization"):
+                    reg = net.regularization()
+                    #TODO add rego
+                    #if hasattr(net, "regularization"):
+                    #    reg = net.regularization()
+                    #    print("reg",reg.item(),"pure loss",loss)
+                    print("reg",reg.item(),"loss",loss.item())
+                    loss = loss + reg
             elif supervision == 'semi':
                 outs = net(data)
                 output, rec = outs

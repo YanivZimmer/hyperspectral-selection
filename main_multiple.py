@@ -358,7 +358,7 @@ for n_selected_bands in bands_amount:
                       scheduler=hyperparams['scheduler'], device=hyperparams['device'],
                       supervision=hyperparams['supervision'], val_loader=val_loader,
                       display=viz)
-                print("gates after 50=",model.get_gates('prob'))
+                #print("gates after 50=",model.get_gates('prob'))
                 if EPOCH2 is not None:
                     probabilities = test(model, img, hyperparams)
                     prediction = np.argmax(probabilities, axis=-1)

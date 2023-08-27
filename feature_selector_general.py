@@ -50,6 +50,8 @@ class FeatureSelector(nn.Module):
     def forward(self, x):
         z = self.mu + self.sigma * self.noise.normal_() * self.training
         stochastic_gate = self.hard_sigmoid(z)
+        if len(x.shape)<4:
+            return x*stochastic_gate
         x = x.squeeze()
         x = torch.transpose(x, 1, 3)
         x = x * stochastic_gate
