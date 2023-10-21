@@ -128,7 +128,7 @@ group_train.add_argument(
 )
 
 group_train.add_argument(
-    "--lam", type=int, help="lam for regularization in feature selection"
+    "--lam", type=float, help="lam for regularization in feature selection"
 )
 group_train.add_argument("--lr_factor", type=int, help="multiply lr by it")
 
@@ -305,16 +305,22 @@ def view():
         )
         plot_spectrums(mean_spectrums, viz, title="Mean spectrum/class")
 
-def train_test(use_stg=True,save_net=False):
+def train_test(use_stg = True, save_net = False):
+    bands_acc_mapping_total = {}
+    bands_kappa_mapping_total = {}
     hyperparams = get_hyperparams()
     results = []
-    all_algo_n_bands_to_selection = read_dict("algo_bands_mapping_results_temp.json")
+    if not use_stg:
+        all_algo_n_bands_to_selection = read_dict("algo_bands_mapping_results_temp.json")
+    else:
+        all_algo_n_bands_to_selection = {"stg" : [] }
     # run the experiment several times
-    bands_acc_mapping = {}
-    bands_f1_mapping = {}
-    bands_kappa_mapping = {}
-    bands_amount = range(11, 12, 5)
+
+    bands_amount = range(17, 18, 5)
     for algo in all_algo_n_bands_to_selection.keys():
+        bands_acc_mapping = {}
+        bands_f1_mapping = {}
+        bands_kappa_mapping = {}
         print("algo = ", algo)
         n_bands_to_selection = all_algo_n_bands_to_selection[algo]
         for n_selected_bands in bands_amount:
@@ -466,7 +472,7 @@ def train_test(use_stg=True,save_net=False):
                             display=viz,
                         )
                         # print("gates after 50=",model.get_gates('prob'))
-                        if EPOCH2 is not None:
+                        if EPOCH2 is not None and EPOCH2!=0:
                             probabilities = test(model, img, hyperparams)
                             prediction = np.argmax(probabilities, axis=-1)
                             run_results = metrics(
@@ -533,14 +539,17 @@ def train_test(use_stg=True,save_net=False):
                 bands_kappa_mapping[n_selected_bands] = kappa
                 bands_f1_mapping[n_selected_bands] = f1score
 
-    print("bands_acc_mapping:=", bands_acc_mapping)
-    print("bands_kappa_mapping:=", bands_kappa_mapping)
-    print("bands_f1_mapping:=", bands_f1_mapping)
-
+            print("bands_acc_mapping:=", bands_acc_mapping)
+            print("bands_kappa_mapping:=", bands_kappa_mapping)
+            print("bands_f1_mapping:=", bands_f1_mapping)
+        bands_acc_mapping_total[algo] = bands_acc_mapping
+        bands_kappa_mapping_total[algo] = bands_kappa_mapping
+    print(bands_acc_mapping_total)
+    print(bands_kappa_mapping_total)
 
     if N_RUNS > 1:
         show_results(results, viz, label_values=LABEL_VALUES, agregated=True)
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
    train_test(use_stg=False,save_net=False)
