@@ -332,9 +332,9 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
         all_algo_n_bands_to_selection = {"stg" : [] }
     # run the experiment several times
 
-    bands_amount = [12]#[22,17,10]#[22, 13]#, 6] #[5, 21, 32, 23]
+    bands_amount = [22]#[22,17,10]#[22, 13]#, 6] #[5, 21, 32, 23]
         #[18, 11, 10,8,6]
-    for algo in all_algo_n_bands_to_selection.keys():
+    for algo in reversed(all_algo_n_bands_to_selection.keys()):
         bands_acc_mapping = {}
         bands_f1_mapping = {}
         bands_kappa_mapping = {}
@@ -366,7 +366,7 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                         hyperparams["weights"] = torch.from_numpy(weights)
                     # set headstart idx if not using stg and just testing other
                     hyperparams["headstart_idx"] = None if use_stg else n_bands_to_selection[str(n_selected_bands)]
-                    #hyperparams["lam"] = lam
+                    hyperparams["lam"] = lam
                     #hyperparams["lr_factor"] = lr_factor
                     #hyperparams["lr"] = lr
                     hyperparams["reps_rel"] = reps_rel
@@ -385,11 +385,11 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                                                    # pin_memory=hyperparams['device'],
                                                    shuffle=True)
                     #CROSS VALIDATOR KFOLD
-                    cross_validator = CrossValidator(display=viz)
+                    cross_validator = CrossValidator(display=viz,k_folds=5)
                     cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
-                                                   num_of_epochs=75)
+                                                   num_of_epochs=125)
                     gates,n0_gates,n1_gates = get_non_zero_bands(model)
-
+                    print("gates", gates)
 
 if __name__ == '__main__':
     res = {}
@@ -410,7 +410,7 @@ if __name__ == '__main__':
     for lam in lams:
         lams_to_acc[lam] = train_test(lam = lam,lr=0.1,lr_factor=1,reps_rel=1e-6,
                                              use_stg=True,save_net=False)'''
-    train_test(lam=1, lr=0.1, lr_factor=1, reps_rel=1e-6,
+    train_test(lam=1.5, lr=0.1, lr_factor=1, reps_rel=1e-6,
                use_stg=True, save_net=False)
 
 

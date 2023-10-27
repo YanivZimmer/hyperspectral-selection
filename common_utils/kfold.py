@@ -19,7 +19,7 @@ class CrossValidator:
 
     def cross_validate(self, model_creator: Callable,
                        dataset: Dataset,num_of_epochs: int, batch_size=256):
-        kfold = KFold(n_splits=self.k_folds, shuffle=True)
+        kfold = KFold(n_splits=self.k_folds, shuffle=False)
         results = {}
         num_gates_positive_prob = {}
         num_gates_prob_one = {}

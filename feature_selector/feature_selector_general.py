@@ -4,83 +4,6 @@ import numpy as np
 import torch
 from torch import nn
 
-WALUDI = [1, 2, 4, 5, 6, 22, 23, 33, 64, 75, 84, 89, 96, 98, 101]
-ISSC_indian = [
-    0,
-    5,
-    7,
-    21,
-    25,
-    27,
-    29,
-    34,
-    37,
-    38,
-    41,
-    66,
-    70,
-    74,
-    83,
-    90,
-    97,
-    99,
-    100,
-    112,
-    121,
-    122,
-    128,
-    131,
-    135,
-    136,
-    137,
-    141,
-    148,
-    153,
-    164,
-    167,
-    176,
-    193,
-]
-LP_indian = [
-    55,
-    56,
-    58,
-    77,
-    85,
-    88,
-    94,
-    96,
-    97,
-    100,
-    104,
-    105,
-    106,
-    107,
-    108,
-    112,
-    113,
-    116,
-    117,
-    118,
-    120,
-    124,
-    129,
-    131,
-    133,
-    140,
-    144,
-    148,
-    150,
-    151,
-    152,
-    153,
-    154,
-    159,
-]
-PREDEFINED_MASK = None
-
-ALGO_NAME = "WALUMI"
-
 
 def create_boolean_tensor(vector, size):
     shifted_vector = np.array(vector) - 1
@@ -101,10 +24,9 @@ class FeatureSelector(nn.Module):
                 input_dim,
             ),
             requires_grad=True,
-        )
-        self.noise = torch.randn(self.mu.size())
+        ) if (self.mask is None) else None
+        self.noise = torch.randn(self.mu.size()) if (self.mask is None) else torch.randn(input_dim)
         self.sigma = sigma
-        self.mask = None
         # if PREDEFINED_MASK is not None:
         #    self.const_masking = create_boolean_tensor(PREDEFINED_MASK, input_dim)
 
@@ -126,10 +48,17 @@ class FeatureSelector(nn.Module):
         return x
 
     def forward(self, x):
+        discount = 1
         if self.mask is not None:
-            return x * self.mask
+            if len(x.shape) == 2:
+                return x * self.mask.to(x.device)
+            x = x.squeeze()
+            x = torch.transpose(x, 1, 3)
+            x = x * self.mask.to(x.device)
+            x = torch.transpose(x, 1, 3)
+            return x.unsqueeze(1)
 
-        z = self.mu + self.sigma * self.noise.normal_() * self.training
+        z = self.mu + discount*self.sigma * self.noise.normal_() * self.training
         stochastic_gate = self.hard_sigmoid(z)
         if len(x.shape) == 2:
             return x * stochastic_gate
@@ -157,6 +86,8 @@ class FeatureSelector(nn.Module):
         self.mask = mask
 
     def get_gates(self, mode):
+        if self.mu is None:
+            return None
         if mode == "raw":
             return self.mu.detach().cpu().numpy()
         elif mode == "prob":
@@ -168,6 +99,7 @@ class FeatureSelector(nn.Module):
 
     def headstart_idx_to_tensor(self, headstart_idx, const_mask=True):
         if headstart_idx is None:
+            self.mask = None
             return
         print(sorted(headstart_idx))
         headstart_mask = torch.zeros(self.input_dim).to(self.device)
@@ -175,7 +107,7 @@ class FeatureSelector(nn.Module):
         shifted_vector = np.array(headstart_idx) - 1
         headstart_mask[shifted_vector] = 1
         if const_mask:
-            self.const_masking = headstart_mask
+            self.mask = headstart_mask
             return
         self.mu = torch.nn.Parameter(
             0.01

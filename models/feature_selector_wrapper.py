@@ -30,7 +30,7 @@ class FeatureSelectionWrapper:
         self.mu = self.feature_selector.mu
 
     def forward(self, x):
-        if self.test and self.feature_selector.const_masking is None:
+        if self.test and self.feature_selector.mask is None:
             self.feature_selector.set_mask(self.get_top_k_gates(self.k))
         return self.feature_selector.forward(x)
 
@@ -43,20 +43,12 @@ class FeatureSelectionWrapper:
         return total_reg
 
     def get_gates(self, mode):
-        if mode == "raw":
-            return self.feature_selector.mu.detach().cpu().numpy()
-        elif mode == "prob":
-            return np.minimum(
-                1.0,
-                np.maximum(0.0, self.feature_selector.mu.detach().cpu().numpy() + 0.5),
-            )
-        else:
-            raise NotImplementedError()
+        return self.feature_selector.get_gates(mode)
 
     def get_top_k_gates(self, k):
         gates = self.get_gates("prob")
         k_max_val = torch.topk(torch.from_numpy(gates), k).values[k - 1]
-        mask = torch.from_numpy(gates) >= max(k_max_val)
+        mask = torch.from_numpy(gates) >= k_max_val
         return mask
 
     def update_bands(self, bands):
