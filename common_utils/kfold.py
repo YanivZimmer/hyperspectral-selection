@@ -10,7 +10,7 @@ from tqdm import tqdm
 K_FOLDS = 10
 
 dataset = None
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class CrossValidator:
     def __init__(self, display, k_folds = K_FOLDS):
@@ -32,7 +32,8 @@ class CrossValidator:
             # Print
             print(f'FOLD {fold}')
             print('--------------------------------')
-
+            if fold%3!=2:
+                continue
             # Sample elements randomly from a given list of ids, no replacement.
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
             test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
@@ -52,19 +53,26 @@ class CrossValidator:
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
-             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
+            num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
-
+            #TODO- this should not stay, just a temp for sess 21-23 Salina 150 epc
+            #break
         print("gates_idx", gates_idx)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.k_folds} FOLDS')
         print('--------------------------------')
         sum = 0.0
+        str_base=""
         for key, value in results.items():
             print(f'Fold {key}: {value} %')
+            str_base += f'Fold {key}: {value} %\n'
             sum += value
         print(f'Average: {sum / len(results.items())} %')
+        str_base += f'Average: {sum / len(results.items())} %\n'
         print("num_gates_prob_one", num_gates_prob_one)
+        str_base += f"num_gates_prob_one {num_gates_prob_one}\n"
         print("num_gates_positive_prob", num_gates_positive_prob)
+        str_base += f"num_gates_positive_prob {num_gates_positive_prob}\n"
+        return str_base
 
 
     def train_naive(self, network, optimizer,loss_function, trainloader, num_epochs):
@@ -141,7 +149,7 @@ class CrossValidator:
 
     def get_non_zero_bands(self,model):
         if not hasattr(model, "get_gates"):
-            return None
+            return None, 0, 0
         gates = model.get_gates(mode="prob")
         if gates is None:
             return None, 0, 0
@@ -201,7 +209,10 @@ class CrossValidator:
                     output = net(data)
                     # target = target - 1
                     loss = criterion(output, target)
-                    reg = net.regularization()
+                    try:
+                      reg = net.regularization()
+                    except:
+                      reg = 0  
                     # TODO add rego
                     # if hasattr(net, "regularization"):
                     #    reg = net.regularization()

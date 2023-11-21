@@ -62,6 +62,14 @@ DATASETS_CONFIG = {
         "img": "Botswana.mat",
         "gt": "Botswana_gt.mat",
     },
+    "Salinas": {
+        "urls": [
+            "https://www.ehu.eus/ccwintco/uploads/a/a3/Salinas_corrected.mat",
+            "https://www.ehu.eus/ccwintco/uploads/f/fa/Salinas_gt.mat",
+        ],
+        "img": "Salinas_corrected.mat",
+        "gt": "Salinas_gt.mat",
+    }
 }
 
 try:
@@ -147,6 +155,36 @@ def get_dataset(dataset_name, target_folder="./", datasets=DATASETS_CONFIG):
             "Shadows",
             "Meadows",
             "Bare Soil",
+        ]
+
+        ignored_labels = [0]
+
+    elif dataset_name == "Salinas":
+        # Load the image
+        img = open_file(folder + "Salinas_corrected.mat")["salinas_corrected"]
+
+        rgb_bands = (55, 41, 12)#temp
+
+        gt = open_file(folder + "Salinas_gt.mat")["salinas_gt"]
+
+        label_values = [
+            "Undefined",
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P"
         ]
 
         ignored_labels = [0]
