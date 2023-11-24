@@ -6,20 +6,24 @@ import torch
 from sklearn.model_selection import KFold
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
+from PIL import Image
+import uuid
+uuid.uuid4()
 K_FOLDS = 10
-
+N_BANDS=103
 dataset = None
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class CrossValidator:
-    def __init__(self, display, k_folds = K_FOLDS):
+    def __init__(self, display, dataset, k_folds = K_FOLDS):
         self.k_folds = k_folds
         self.display = display
+        self.dataset = dataset
 
     def cross_validate(self, model_creator: Callable,
-                       dataset: Dataset,num_of_epochs: int, batch_size=256):
-        kfold = KFold(n_splits=self.k_folds, shuffle=False)
+                       dataset: Dataset,num_of_epochs: int,lam,batch_size=256):
+        #ATTENTION- shuffle changed to true
+        kfold = KFold(n_splits=self.k_folds, shuffle=True)
         results = {}
         num_gates_positive_prob = {}
         num_gates_prob_one = {}
@@ -32,8 +36,8 @@ class CrossValidator:
             # Print
             print(f'FOLD {fold}')
             print('--------------------------------')
-            if fold%3!=2:
-                continue
+            #if fold%3!=2:
+            #    continue
             # Sample elements randomly from a given list of ids, no replacement.
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
             test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
@@ -48,14 +52,14 @@ class CrossValidator:
             network, optimizer, loss_function, _ = model_creator()
 
             #train
-            self.train(network, optimizer, loss_function, trainloader, num_of_epochs,
+            self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
                        display_iter=100, device=device, display=self.display)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
-            #TODO- this should not stay, just a temp for sess 21-23 Salina 150 epc
+            #TODO- this should not stay, just a temp for running only one fold
             #break
         print("gates_idx", gates_idx)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.k_folds} FOLDS')
@@ -143,7 +147,7 @@ class CrossValidator:
             print('Accuracy for fold %d: %d %%' % (fold, 100.0 * correct / total))
             print('--------------------------------')
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(network)
-
+            self.write_last_gates(gates,gates_prob_one)
             #return results of test
             return 100.0 * (correct / total), gates, gates_prob_one, gates_positive_prob
 
@@ -154,10 +158,28 @@ class CrossValidator:
         if gates is None:
             return None, 0, 0
         return gates, sum(gates == 1), sum(gates > 0)
+    
+    def gates_progression_image(self,matrix,fold,lam,one_gates):
+        # Scale the matrix values to the range [0, 255]
+        scaled_matrix = ((1-matrix) * 255).astype(np.uint8)
 
+        # Create a Pillow image from the matrix
+        image = Image.fromarray(scaled_matrix, mode='L')
+
+        # Save or display the image
+        image.save(f'{self.dataset}/grayscale_image_gates_{one_gates}_fold_{fold}_lam_{lam}_guid_{str(uuid.uuid4())}.png')
+        #image.show()
+    def write_last_gates(self,gates,one_gates):
+        with open(f'{self.dataset}/final_gates_{one_gates}_guid_{str(uuid.uuid4())}.txt', "w") as file1:
+        # Writing data to a file
+          file1.write(str(gates))
+    
     def train(self, net, optimizer, criterion, data_loader, epoch,
-              display_iter=100, device=torch.device('cuda'), display=None,
+              fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
               val_loader=None, supervision='full'):
+        regu_early_start = 1
+        regu_early_step = 0
+        regu_weird=False
         """
         Training loop to optimize a network for several epochs and a specified loss
 
@@ -174,7 +196,8 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-
+        save_gates_progression=False
+        gates_progression=np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
 
@@ -194,7 +217,9 @@ class CrossValidator:
         val_accuracies = []
 
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
-
+            if regu_weird:
+                regu_early_start = min(regu_early_start + regu_early_step, 1)
+                print("Discount factor=", regu_early_start)
             # Set the network to training mode
             net.train()
             avg_loss = 0.
@@ -210,9 +235,10 @@ class CrossValidator:
                     # target = target - 1
                     loss = criterion(output, target)
                     try:
-                      reg = net.regularization()
+                        reg = net.regularization() if not regu_weird else regu_early_start*net.regularization()
+                    #TODO -specific error
                     except:
-                      reg = 0  
+                        reg = 0
                     # TODO add rego
                     # if hasattr(net, "regularization"):
                     #    reg = net.regularization()
@@ -253,8 +279,6 @@ class CrossValidator:
                               }
                     )
                     tqdm.write(string)
-                    if hasattr(net, "feature_selector"):
-                        print(net.feature_selector.get_gates('prob'))
 
                     if len(val_accuracies) > 0:
                         val_win = display.line(Y=np.array(val_accuracies),
@@ -266,7 +290,15 @@ class CrossValidator:
                                                      })
                 iter_ += 1
                 del (data, target, loss, output)
-
+            if save_gates_progression and hasattr(net, "feature_selector"):
+                curr_gates=net.feature_selector.get_gates('prob')
+                gates_progression=np.vstack((gates_progression, curr_gates))
+                print(curr_gates.shape)
+                print(gates_progression.shape)
             # Update the scheduler
             avg_loss /= len(data_loader)
             metric = avg_loss
+        if save_gates_progression:
+            print("Saving the gates progression image...")
+            gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)
+            self.gates_progression_image(gates_progression,fold,lam,gates_prob_one)

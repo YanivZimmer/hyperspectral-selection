@@ -14,7 +14,7 @@ For commercial use, please contact the authors.
 # Python 2/3 compatiblity
 from __future__ import division, print_function
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 os.environ["WORLD_SIZE"] = "1"
 import torch
 #
@@ -29,6 +29,7 @@ import seaborn as sns
 import sklearn.svm
 # Torch
 import torch
+torch.set_float32_matmul_precision('medium')
 import torch.utils.data as data
 import visdom
 from torchsummary import summary
@@ -354,7 +355,7 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
     bands_amount = [BANDS_AMOUNT]#[22]#[22,17,10]#[22, 13]#, 6] #[5, 21, 32, 23]
         #[18, 11, 10,8,6]
         #['WALUDI','ISSC']:
-    for algo in ['RGB']:#all_algo_n_bands_to_selection.keys():
+    for algo in all_algo_n_bands_to_selection.keys():
         bands_acc_mapping = {}
         bands_f1_mapping = {}
         bands_kappa_mapping = {}
@@ -403,11 +404,12 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                     train_loader = data.DataLoader(train_dataset,
                                                    batch_size=hyperparams['batch_size'],
                                                    # pin_memory=hyperparams['device'],
-                                                   shuffle=True)
+                                                   shuffle=True, num_workers=127)
                     #CROSS VALIDATOR KFOLD
-                    cross_validator = CrossValidator(display=viz,k_folds=10)
+                    cross_validator = CrossValidator(display=viz,dataset=DATASET,k_folds=5)
                     kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
-                                                   num_of_epochs=EPOCH)
+                                                   num_of_epochs=EPOCH,
+                                                   lam=lam)
                     gates,n0_gates,n1_gates = get_non_zero_bands(model)
                     #print("gates", gates)
                     algo_kfold[algo] = kfold_res
@@ -420,22 +422,15 @@ if __name__ == '__main__':
     optional_lr = [0.01]#, 0.005,0.1]#[0.001,0.01,0.1,0.005,0.002,0.02,0.0001]
     optional_factor = [1]#, 50, 25]# [1,2,5,10,17,25,50]
     reps_rel_options = [1e-6]
-    '''for reps_rel in reps_rel_options:
-        for lr in optional_lr:
-            temp = {}
-            for lr_factor in optional_factor:
-                temp[lr_factor] = train_test(lr=lr,lr_factor=lr_factor,reps_rel=reps_rel,
-                                             use_stg=True,save_net=False)
-            res[lr] = temp
-            print(temp)
-    print(res)'''
-    '''lams=[0.1,0.25,0.5,1,1.5,2]
-    lams_to_acc = {}
-    for lam in lams:
-        lams_to_acc[lam] = train_test(lam = lam,lr=0.1,lr_factor=1,reps_rel=1e-6,
-                                             use_stg=True,save_net=False)'''
-    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6,
-               use_stg=False, save_net=False)
+    '''
+    x = 2
+    y = 0.5
+    step = -0.1
+    for lam in [2.5,1.25,0.7]:#np.arange(x, y + step, step):
+        print("lam", lam)
+        train_test(lam=lam, lr=0.1, lr_factor=1, reps_rel=1e-6,
+                   use_stg=True, save_net=False)'''
+    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6,use_stg=False, save_net=False)
 
 
 #hamida
