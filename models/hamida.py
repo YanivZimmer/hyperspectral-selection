@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.nn import init
 
 from feature_selector.feature_selector_general import FeatureSelector
-
+from feature_selector.feature_selector_l1_conv import FeatureSelectorL1Conv
 from .feature_selector_wrapper import FeatureSelectionWrapper
 
 
@@ -22,6 +22,8 @@ class HamidaEtAl(nn.Module):
             init.kaiming_normal_(m.weight)
             init.zeros_(m.bias)
 
+    def __init__(self):
+        pass
     def __init__(self, input_channels, n_classes, patch_size=5, dilation=1):
         super(HamidaEtAl, self).__init__()
         # The first layer is a (3,3,3) kernel sized Conv characterized
@@ -123,5 +125,25 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
 
     def forward(self, x):
         x = self.feature_selector.forward(x)
+        x = HamidaEtAl.forward(self=self, x=x)
+        return x
+
+
+class HamidaL1(HamidaEtAl, FeatureSelectorL1Conv):
+    def __init__(
+        self,
+        input_channels,
+        n_classes,
+        patch_size=5,
+        dilation=1,
+        device="cuda:0",
+    ):
+        FeatureSelectorL1Conv.__init__(self, input_channels)
+        HamidaEtAl.__init__(
+            self, input_channels, n_classes, patch_size=patch_size, dilation=dilation
+        )
+
+    def forward(self, x):
+        x = FeatureSelectorL1Conv.forward(self=self, x=x)
         x = HamidaEtAl.forward(self=self, x=x)
         return x

@@ -14,8 +14,8 @@ For commercial use, please contact the authors.
 # Python 2/3 compatiblity
 from __future__ import division, print_function
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
-os.environ["WORLD_SIZE"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+#os.environ["WORLD_SIZE"] = "1"
 import torch
 #
 #import os
@@ -404,7 +404,7 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                     train_loader = data.DataLoader(train_dataset,
                                                    batch_size=hyperparams['batch_size'],
                                                    # pin_memory=hyperparams['device'],
-                                                   shuffle=True, num_workers=127)
+                                                   shuffle=True, num_workers=8)
                     #CROSS VALIDATOR KFOLD
                     cross_validator = CrossValidator(display=viz,dataset=DATASET,k_folds=5)
                     kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
@@ -430,7 +430,7 @@ if __name__ == '__main__':
         print("lam", lam)
         train_test(lam=lam, lr=0.1, lr_factor=1, reps_rel=1e-6,
                    use_stg=True, save_net=False)'''
-    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6,use_stg=False, save_net=False)
+    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=True, save_net=False)
 
 
 #hamida

@@ -7,12 +7,15 @@ from sklearn.model_selection import KFold
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from PIL import Image
+import matplotlib.pyplot as plt
 import uuid
 uuid.uuid4()
 K_FOLDS = 10
-N_BANDS=103
+N_BANDS = 103
 dataset = None
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
+from dog import LDoG
+from dog import PolynomialDecayAverager
 
 class CrossValidator:
     def __init__(self, display, dataset, k_folds = K_FOLDS):
@@ -53,14 +56,14 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                       display_iter=100, device=device, display=self.display)
+                       display_iter=100, device=device, display=self.display,val_loader=testloader)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
             #TODO- this should not stay, just a temp for running only one fold
-            #break
+            break
         print("gates_idx", gates_idx)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.k_folds} FOLDS')
         print('--------------------------------')
@@ -196,8 +199,11 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        save_gates_progression=False
-        gates_progression=np.empty((N_BANDS,))
+        optimizer = LDoG(net.parameters())
+        averager = PolynomialDecayAverager(net)
+
+        save_gates_progression = False
+        gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
 
@@ -215,7 +221,7 @@ class CrossValidator:
         iter_ = 1
         loss_win, val_win = None, None
         val_accuracies = []
-
+        train_accuracies = []
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
@@ -254,7 +260,7 @@ class CrossValidator:
                     raise ValueError("supervision mode \"{}\" is unknown.".format(supervision))
                 loss.backward()
                 optimizer.step()
-
+                averager.step()
                 avg_loss += loss.item()
                 losses[iter_] = loss.item()
                 mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_ + 1])
@@ -298,7 +304,52 @@ class CrossValidator:
             # Update the scheduler
             avg_loss /= len(data_loader)
             metric = avg_loss
+            if val_loader is not None:
+                val_acc = self.val(net, val_loader, device=device, supervision=supervision)
+                val_accuracies.append(val_acc)
+                train_acc = self.val(net, data_loader, device=device, supervision=supervision)
+                train_accuracies.append(train_acc)
         if save_gates_progression:
             print("Saving the gates progression image...")
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)
             self.gates_progression_image(gates_progression,fold,lam,gates_prob_one)
+        if val_loader is not None:
+            self.save_acc_plot(train=train_accuracies,val=val_accuracies)
+    def save_acc_plot(self,train,val):
+        x_values = np.arange(len(train))
+        plt.plot(x_values, train, label='Train')
+        plt.plot(x_values, val, label='Test')
+
+        # Add labels and title
+        plt.xlabel('Index')
+        plt.ylabel('Values')
+        plt.title('...')
+        # Add a legend
+        plt.legend()
+
+        # Show the plot
+        plt.show()
+
+    def val(self,net, data_loader, device=torch.device('cuda'), supervision='full'):
+        # TODO : fix me using metrics()
+        net.eval()
+        accuracy, total = 0., 0.
+        ignored_labels = data_loader.dataset.ignored_labels
+        for batch_idx, (data, target) in enumerate(data_loader):
+            with torch.no_grad():
+                # Load the data into the GPU if required
+                data, target = data.to(device), target.to(device)
+                if supervision == 'full':
+                    output = net(data)
+                elif supervision == 'semi':
+                    outs = net(data)
+                    output, rec = outs
+                _, output = torch.max(output, dim=1)
+                # target = target - 1
+                for pred, out in zip(output.view(-1), target.view(-1)):
+                    if out.item() in ignored_labels:
+                        continue
+                    else:
+                        accuracy += out.item() == pred.item()
+                        total += 1
+        return accuracy / total
