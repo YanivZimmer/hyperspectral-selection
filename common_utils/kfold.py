@@ -18,10 +18,11 @@ from dog import LDoG
 from dog import PolynomialDecayAverager
 
 class CrossValidator:
-    def __init__(self, display, dataset, k_folds = K_FOLDS):
+    def __init__(self, display, dataset_name, k_folds = K_FOLDS):
         self.k_folds = k_folds
         self.display = display
-        self.dataset = dataset
+        self.dataset_name = dataset_name
+        self.visualizer = Visualizer()
 
     def cross_validate(self, model_creator: Callable,
                        dataset: Dataset,num_of_epochs: int,lam,algo_name,batch_size=256):
@@ -150,7 +151,7 @@ class CrossValidator:
             print('Accuracy for fold %d: %d %%' % (fold, 100.0 * correct / total))
             print('--------------------------------')
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(network)
-            self.write_last_gates(gates,gates_prob_one)
+            self.visualizer.write_last_gates(self.dataset_name,gates,gates_prob_one)
             #return results of test
             return 100.0 * (correct / total), gates, gates_prob_one, gates_positive_prob
 
@@ -161,22 +162,7 @@ class CrossValidator:
         if gates is None:
             return None, 0, 0
         return gates, sum(gates == 1), sum(gates > 0)
-    
-    def gates_progression_image(self,matrix,fold,lam,one_gates):
-        # Scale the matrix values to the range [0, 255]
-        scaled_matrix = ((1-matrix) * 255).astype(np.uint8)
 
-        # Create a Pillow image from the matrix
-        image = Image.fromarray(scaled_matrix, mode='L')
-
-        # Save or display the image
-        image.save(f'{self.dataset}/grayscale_image_gates_{one_gates}_fold_{fold}_lam_{lam}_guid_{str(uuid.uuid4())}.png')
-        #image.show()
-    def write_last_gates(self,gates,one_gates):
-        with open(f'{self.dataset}/final_gates_{one_gates}_guid_{str(uuid.uuid4())}.txt', "w") as file1:
-        # Writing data to a file
-          file1.write(str(gates))
-    
     def train(self, net, optimizer, criterion, data_loader, epoch,
               fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
               val_loader=None,algo_name=None, supervision='full',):
@@ -313,24 +299,9 @@ class CrossValidator:
         if save_gates_progression:
             print("Saving the gates progression image...")
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)
-            self.gates_progression_image(gates_progression,fold,lam,gates_prob_one)
+            self.visualizer.gates_progression_image(self.dataset_name,gates_progression,fold,lam,gates_prob_one)
         if val_loader is not None:
-            self.save_acc_plot(train=train_accuracies,val=val_accuracies,algo_name=algo_name,fold=fold,lam=lam,optimizer=optimizer)
-
-    def save_acc_plot(self,train,val,algo_name,fold,lam,optimizer):
-        x_values = np.arange(len(train))
-        plt.clf()
-        plt.plot(x_values, train, label=f'Train_{fold}')
-        plt.plot(x_values, val, label=f'Test_{fold}')
-        title=f'acc_plot_{algo_name}_lam_{lam}_fold_{fold}_opt{optimizer.__class__.__name__}'
-        # Add labels and title
-        plt.xlabel('Index')
-        plt.ylabel('Values')
-        plt.title(title)
-        # Add a legend
-        plt.legend()
-        # Save the plot
-        plt.savefig(f'{self.dataset}/{title}_{str(uuid.uuid4())}.png')
+            self.visualizer.save_acc_plot(self.dataset_name,train=train_accuracies,val=val_accuracies,algo_name=algo_name,fold=fold,lam=lam,optimizer=optimizer)
 
     def val(self,net, data_loader, device=torch.device('cuda'), supervision='full'):
         # TODO : fix me using metrics()

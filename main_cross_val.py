@@ -406,7 +406,7 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                                                    # pin_memory=hyperparams['device'],
                                                    shuffle=True, num_workers=8)
                     #CROSS VALIDATOR KFOLD
-                    cross_validator = CrossValidator(display=viz,dataset=DATASET,k_folds=5)
+                    cross_validator = CrossValidator(display=viz,dataset_name=DATASET,k_folds=5)
                     kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
                                                    num_of_epochs=EPOCH,
                                                    lam=lam,algo_name=algo)
