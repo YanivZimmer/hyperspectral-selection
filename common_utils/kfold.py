@@ -1,5 +1,6 @@
 # Define the K-fold Cross Validator
 from typing import Callable
+from common_utils.visualizer import Visualizer
 
 import numpy as np
 import torch
@@ -185,10 +186,10 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        #optimizer = LDoG(net.parameters())
-        averager = None#PolynomialDecayAverager(net)
+        optimizer = LDoG(net.parameters())
+        averager = PolynomialDecayAverager(net)
 
-        save_gates_progression = False
+        save_gates_progression = True
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")

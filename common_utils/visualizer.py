@@ -25,7 +25,7 @@ class Visualizer:
 
     def write_last_gates(self, dataset, gates, one_gates):
         dir = f'{dataset}/gates'
-        data = {one_gates: gates}
+        data = {int(one_gates): gates.tolist()}
         if not os.path.exists(dir):
             os.mkdir(dir)
         with open(f'{dir}/final_gates_{one_gates}_guid_{str(uuid.uuid4())}.json', "w") as f:
@@ -36,12 +36,15 @@ class Visualizer:
         plt.clf()
         plt.plot(x_values, train, label=f'Train_{fold}')
         plt.plot(x_values, val, label=f'Test_{fold}')
-        title=f'acc_plot_{algo_name}_lam_{lam}_fold_{fold}_opt{optimizer.__class__.__name__}'
+        title=f'acc_plot_{algo_name}_lam_{lam}_fold_{fold}_opt_{optimizer.__class__.__name__}'
         # Add labels and title
         plt.xlabel('Index')
         plt.ylabel('Values')
         plt.title(title)
         # Add a legend
         plt.legend()
+        full_name=f'{dataset}/{title}_{str(uuid.uuid4())}'
         # Save the plot
-        plt.savefig(f'{dataset}/{title}_{str(uuid.uuid4())}.png')
+        plt.savefig(f'{full_name}.png')
+        with open(f'{full_name}.json', "w") as f:
+            json.dump({"train_acc":train,"val_acc":val}, f, ensure_ascii=False)

@@ -6,6 +6,7 @@ from torch.nn import init
 from feature_selector.feature_selector_general import FeatureSelector
 from feature_selector.feature_selector_l1_conv import FeatureSelectorL1Conv
 from .feature_selector_wrapper import FeatureSelectionWrapper
+from .feature_selector_l1_wrapper import FeatureSelectionL1Wrapper
 
 
 class HamidaEtAl(nn.Module):
@@ -129,7 +130,7 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
         return x
 
 
-class HamidaL1(HamidaEtAl, FeatureSelectorL1Conv):
+class HamidaL1(HamidaEtAl, FeatureSelectionL1Wrapper):
     def __init__(
         self,
         input_channels,
@@ -138,12 +139,12 @@ class HamidaL1(HamidaEtAl, FeatureSelectorL1Conv):
         dilation=1,
         device="cuda:0",
     ):
-        FeatureSelectorL1Conv.__init__(self, input_channels)
         HamidaEtAl.__init__(
             self, input_channels, n_classes, patch_size=patch_size, dilation=dilation
         )
+        FeatureSelectionL1Wrapper.__init__(self, input_channels)
 
     def forward(self, x):
-        x = FeatureSelectorL1Conv.forward(self=self, x=x)
+        x = FeatureSelectionL1Wrapper.forward(self=self, x=x)
         x = HamidaEtAl.forward(self=self, x=x)
         return x
