@@ -93,12 +93,13 @@ def get_model(name, **kwargs):
         lr = kwargs.setdefault("learning_rate", 0.01)
         # different learning rates ls
 
-        modified_lr = [
-            {"params": list(model.parameters())[1:], "lr": lr},
-            {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
-        ]
-        # optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
-        optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
+        #modified_lr = [
+        #    {"params": list(model.parameters())[1:], "lr": lr},
+        #   {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
+        #]
+        optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
+        #optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=0.0005)
+        #optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
         #optimizer = DoG(model.parameters())
         kwargs.setdefault("batch_size", 256)
         criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])

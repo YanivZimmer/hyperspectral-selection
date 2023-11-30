@@ -24,7 +24,7 @@ class CrossValidator:
         self.dataset = dataset
 
     def cross_validate(self, model_creator: Callable,
-                       dataset: Dataset,num_of_epochs: int,lam,batch_size=256):
+                       dataset: Dataset,num_of_epochs: int,lam,algo_name,batch_size=256):
         #ATTENTION- shuffle changed to true
         kfold = KFold(n_splits=self.k_folds, shuffle=True)
         results = {}
@@ -56,14 +56,14 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                       display_iter=100, device=device, display=self.display,val_loader=testloader)
+                       display_iter=100, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
             #TODO- this should not stay, just a temp for running only one fold
-            break
+            #break
         print("gates_idx", gates_idx)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.k_folds} FOLDS')
         print('--------------------------------')
@@ -179,7 +179,7 @@ class CrossValidator:
     
     def train(self, net, optimizer, criterion, data_loader, epoch,
               fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
-              val_loader=None, supervision='full'):
+              val_loader=None,algo_name=None, supervision='full',):
         regu_early_start = 1
         regu_early_step = 0
         regu_weird=False
@@ -199,8 +199,8 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        optimizer = LDoG(net.parameters())
-        averager = PolynomialDecayAverager(net)
+        #optimizer = LDoG(net.parameters())
+        averager = None#PolynomialDecayAverager(net)
 
         save_gates_progression = False
         gates_progression = np.empty((N_BANDS,))
@@ -260,7 +260,8 @@ class CrossValidator:
                     raise ValueError("supervision mode \"{}\" is unknown.".format(supervision))
                 loss.backward()
                 optimizer.step()
-                averager.step()
+                if not averager is None:
+                    averager.step()
                 avg_loss += loss.item()
                 losses[iter_] = loss.item()
                 mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_ + 1])
@@ -314,21 +315,22 @@ class CrossValidator:
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)
             self.gates_progression_image(gates_progression,fold,lam,gates_prob_one)
         if val_loader is not None:
-            self.save_acc_plot(train=train_accuracies,val=val_accuracies)
-    def save_acc_plot(self,train,val):
-        x_values = np.arange(len(train))
-        plt.plot(x_values, train, label='Train')
-        plt.plot(x_values, val, label='Test')
+            self.save_acc_plot(train=train_accuracies,val=val_accuracies,algo_name=algo_name,fold=fold,lam=lam,optimizer=optimizer)
 
+    def save_acc_plot(self,train,val,algo_name,fold,lam,optimizer):
+        x_values = np.arange(len(train))
+        plt.clf()
+        plt.plot(x_values, train, label=f'Train_{fold}')
+        plt.plot(x_values, val, label=f'Test_{fold}')
+        title=f'acc_plot_{algo_name}_lam_{lam}_fold_{fold}_opt{optimizer.__class__.__name__}'
         # Add labels and title
         plt.xlabel('Index')
         plt.ylabel('Values')
-        plt.title('...')
+        plt.title(title)
         # Add a legend
         plt.legend()
-
-        # Show the plot
-        plt.show()
+        # Save the plot
+        plt.savefig(f'{self.dataset}/{title}_{str(uuid.uuid4())}.png')
 
     def val(self,net, data_loader, device=torch.device('cuda'), supervision='full'):
         # TODO : fix me using metrics()

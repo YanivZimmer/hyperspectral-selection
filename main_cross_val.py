@@ -14,8 +14,8 @@ For commercial use, please contact the authors.
 # Python 2/3 compatiblity
 from __future__ import division, print_function
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"] = "6"
-#os.environ["WORLD_SIZE"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["WORLD_SIZE"] = "1"
 import torch
 #
 #import os
@@ -409,7 +409,7 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                     cross_validator = CrossValidator(display=viz,dataset=DATASET,k_folds=5)
                     kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
                                                    num_of_epochs=EPOCH,
-                                                   lam=lam)
+                                                   lam=lam,algo_name=algo)
                     gates,n0_gates,n1_gates = get_non_zero_bands(model)
                     #print("gates", gates)
                     algo_kfold[algo] = kfold_res
