@@ -13,31 +13,35 @@ import uuid
 uuid.uuid4()
 K_FOLDS = 10
 N_BANDS = 103
-dataset = None
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 from dog import LDoG
 from dog import PolynomialDecayAverager
 
 class CrossValidator:
-    def __init__(self, display, dataset_name, k_folds = K_FOLDS):
-        self.k_folds = k_folds
+    def __init__(self, display, dataset, dataset_name, n_folds = K_FOLDS):
+        self.n_folds = n_folds
         self.display = display
+        self.dataset = dataset
         self.dataset_name = dataset_name
         self.visualizer = Visualizer()
-
-    def cross_validate(self, model_creator: Callable,
-                       dataset: Dataset,num_of_epochs: int,lam,algo_name,batch_size=256):
+        self.log_last_gates = False
+        self.save_gates_progression = False
+        kfold = KFold(n_splits=self.n_folds, shuffle=True)
+        self.folds = list(kfold.split(dataset))
+        #self.folds_idx,(self.train_ids,self.test_ids) = self.folds
+    def cross_validate(self, model_creator: Callable, num_of_epochs: int,lam,algo_name,batch_size=256):
         #ATTENTION- shuffle changed to true
-        kfold = KFold(n_splits=self.k_folds, shuffle=True)
+        #kfold = KFold(n_splits=self.k_folds, shuffle=True)
         results = {}
         num_gates_positive_prob = {}
         num_gates_prob_one = {}
         gates_idx = {}
+        gates_idx_all = {}
         # Start print
         print('--------------------------------')
 
         # K-fold Cross Validation model evaluation
-        for fold, (train_ids, test_ids) in enumerate(kfold.split(dataset)):
+        for fold, (train_ids, test_ids) in enumerate(self.folds):
             # Print
             print(f'FOLD {fold}')
             print('--------------------------------')
@@ -49,10 +53,10 @@ class CrossValidator:
 
             # Define data loaders for training and testing data in this fold
             trainloader = torch.utils.data.DataLoader(
-                dataset,
+                self.dataset,
                 batch_size=batch_size, sampler=train_subsampler)
             testloader = torch.utils.data.DataLoader(
-                dataset,
+                self.dataset,
                 batch_size=batch_size, sampler=test_subsampler)
             network, optimizer, loss_function, _ = model_creator()
 
@@ -64,10 +68,11 @@ class CrossValidator:
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
+            gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
             #TODO- this should not stay, just a temp for running only one fold
             #break
-        print("gates_idx", gates_idx)
-        print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.k_folds} FOLDS')
+        print("gates_idx_all", gates_idx_all)
+        print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.n_folds} FOLDS')
         print('--------------------------------')
         sum = 0.0
         str_base=""
@@ -152,7 +157,8 @@ class CrossValidator:
             print('Accuracy for fold %d: %d %%' % (fold, 100.0 * correct / total))
             print('--------------------------------')
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(network)
-            self.visualizer.write_last_gates(self.dataset_name,gates,gates_prob_one)
+            if self.log_last_gates:
+                self.visualizer.write_last_gates(self.dataset_name,gates,gates_prob_one)
             #return results of test
             return 100.0 * (correct / total), gates, gates_prob_one, gates_positive_prob
 
@@ -189,7 +195,6 @@ class CrossValidator:
         optimizer = LDoG(net.parameters())
         averager = PolynomialDecayAverager(net)
 
-        save_gates_progression = True
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -284,7 +289,7 @@ class CrossValidator:
                                                      })
                 iter_ += 1
                 del (data, target, loss, output)
-            if save_gates_progression and hasattr(net, "feature_selector"):
+            if self.save_gates_progression and hasattr(net, "feature_selector"):
                 curr_gates=net.feature_selector.get_gates('prob')
                 gates_progression=np.vstack((gates_progression, curr_gates))
                 print(curr_gates.shape)
@@ -297,7 +302,7 @@ class CrossValidator:
                 val_accuracies.append(val_acc)
                 train_acc = self.val(net, data_loader, device=device, supervision=supervision)
                 train_accuracies.append(train_acc)
-        if save_gates_progression:
+        if self.save_gates_progression:
             print("Saving the gates progression image...")
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)
             self.visualizer.gates_progression_image(self.dataset_name,gates_progression,fold,lam,gates_prob_one)

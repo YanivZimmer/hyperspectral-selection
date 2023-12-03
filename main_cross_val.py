@@ -14,7 +14,7 @@ For commercial use, please contact the authors.
 # Python 2/3 compatiblity
 from __future__ import division, print_function
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 os.environ["WORLD_SIZE"] = "1"
 import torch
 #
@@ -339,7 +339,7 @@ def model_creator_func(**hyperparams):
     return get_model(MODEL, **hyperparams)
 
 
-def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
+def train_test(lam, lr,lr_factor,reps_rel,use_stg = True,batch_size=256, save_net = False):
     algo_kfold = {}
     bands_acc_mapping_total = {}
     bands_kappa_mapping_total = {}
@@ -355,6 +355,21 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
     bands_amount = [BANDS_AMOUNT]#[22]#[22,17,10]#[22, 13]#, 6] #[5, 21, 32, 23]
         #[18, 11, 10,8,6]
         #['WALUDI','ISSC']:
+
+    train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
+    train_gt, val_gt = sample_gt(train_gt, 0.999, mode="random")
+    # Generate the dataset
+    hyperparams["headstart_idx"] = None# if use_stg else n_bands_to_selection[str(n_selected_bands)]
+    hyperparams["lam"] = lam
+    #hyperparams["reps_rel"] = reps_rel
+    model, optimizer, loss, hyperparams = get_model(MODEL, **hyperparams)
+    train_dataset = HyperX(img, train_gt, **hyperparams)
+    train_loader = data.DataLoader(train_dataset,
+                                   batch_size=hyperparams['batch_size'],
+                                   # pin_memory=hyperparams['device'],
+                                   shuffle=True, num_workers=8)
+    # CROSS VALIDATOR KFOLD
+    cross_validator = CrossValidator(display=viz, dataset=train_dataset, dataset_name=DATASET, n_folds=5)
     for algo in all_algo_n_bands_to_selection.keys():
         bands_acc_mapping = {}
         bands_f1_mapping = {}
@@ -364,8 +379,6 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
         n_bands_to_selection = all_algo_n_bands_to_selection[algo]
         for n_selected_bands in bands_amount:
             for run in range(N_RUNS):
-                train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
-
                 print(
                     "{} samples selected (over {})".format(
                         np.count_nonzero(train_gt), np.count_nonzero(gt)
@@ -386,7 +399,7 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                         weights = compute_imf_weights(train_gt, N_CLASSES, IGNORED_LABELS)
                         hyperparams["weights"] = torch.from_numpy(weights)
                     # set headstart idx if not using stg and just testing other
-                    hyperparams["headstart_idx"] = None if use_stg else n_bands_to_selection[str(n_selected_bands)]
+                    hyperparams["headstart_idx"] = None #if use_stg else n_bands_to_selection[str(n_selected_bands)]
                     hyperparams["lam"] = lam
                     #hyperparams["lr_factor"] = lr_factor
                     #hyperparams["lr"] = lr
@@ -398,18 +411,10 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                         model.k = n_selected_bands
 
                     # Split train set in train/val
-                    train_gt, val_gt = sample_gt(train_gt, 0.99, mode="random")
-                    # Generate the dataset
-                    train_dataset = HyperX(img, train_gt, **hyperparams)
-                    train_loader = data.DataLoader(train_dataset,
-                                                   batch_size=hyperparams['batch_size'],
-                                                   # pin_memory=hyperparams['device'],
-                                                   shuffle=True, num_workers=8)
-                    #CROSS VALIDATOR KFOLD
-                    cross_validator = CrossValidator(display=viz,dataset_name=DATASET,k_folds=5)
-                    kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
+
+                    kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams),
                                                    num_of_epochs=EPOCH,
-                                                   lam=lam,algo_name=algo)
+                                                   lam=lam,algo_name=algo,batch_size=batch_size)
                     gates,n0_gates,n1_gates = get_non_zero_bands(model)
                     #print("gates", gates)
                     algo_kfold[algo] = kfold_res
@@ -422,15 +427,24 @@ if __name__ == '__main__':
     optional_lr = [0.01]#, 0.005,0.1]#[0.001,0.01,0.1,0.005,0.002,0.02,0.0001]
     optional_factor = [1]#, 50, 25]# [1,2,5,10,17,25,50]
     reps_rel_options = [1e-6]
-    '''
-    x = 2
-    y = 0.5
+    
+    '''x = 4
+    y = 3.5
     step = -0.1
-    for lam in [2.5,1.25,0.7]:#np.arange(x, y + step, step):
-        print("lam", lam)
+    for lam in np.arange(x, y + step, step):
+        print("lam next", lam)
         train_test(lam=lam, lr=0.1, lr_factor=1, reps_rel=1e-6,
-                   use_stg=True, save_net=False)'''
-    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=True, save_net=False)
+                   use_stg=True, save_net=False)
+        print("lam before", lam)
+    x = 0.5
+    y = 0.1
+    step = -0.1
+    for lam in np.arange(x, y + step, step):
+        print("lam next", lam)
+        train_test(lam=lam, lr=0.1, lr_factor=1, reps_rel=1e-6,
+                   use_stg=True, save_net=False)
+        print("lam before", lam)'''
+    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=False, save_net=False)
 
 
 #hamida
