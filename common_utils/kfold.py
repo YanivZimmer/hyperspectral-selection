@@ -1,4 +1,5 @@
 # Define the K-fold Cross Validator
+import os
 from typing import Callable
 from common_utils.visualizer import Visualizer
 
@@ -18,7 +19,9 @@ from dog import LDoG
 from dog import PolynomialDecayAverager
 
 class CrossValidator:
+    Patience = 5
     def __init__(self, display, dataset, dataset_name, n_folds = K_FOLDS):
+
         self.n_folds = n_folds
         self.display = display
         self.dataset = dataset
@@ -28,6 +31,7 @@ class CrossValidator:
         self.save_gates_progression = False
         kfold = KFold(n_splits=self.n_folds, shuffle=True)
         self.folds = list(kfold.split(dataset))
+
         #self.folds_idx,(self.train_ids,self.test_ids) = self.folds
     def cross_validate(self, model_creator: Callable, num_of_epochs: int,lam,algo_name,batch_size=256):
         #ATTENTION- shuffle changed to true
@@ -78,55 +82,18 @@ class CrossValidator:
         str_base=""
         for key, value in results.items():
             print(f'Fold {key}: {value} %')
-            str_base += f'Fold {key}: {value} %\n'
+            str_base += f'Fold {key}: {value}'
+            str_base += os.linesep
             sum += value
         print(f'Average: {sum / len(results.items())} %')
-        str_base += f'Average: {sum / len(results.items())} %\n'
+        str_base += f'Average: {sum / len(results.items())}'
+        str_base += os.linesep
         print("num_gates_prob_one", num_gates_prob_one)
         str_base += f"num_gates_prob_one {num_gates_prob_one}\n"
         print("num_gates_positive_prob", num_gates_positive_prob)
         str_base += f"num_gates_positive_prob {num_gates_positive_prob}\n"
         return str_base
 
-
-    def train_naive(self, network, optimizer,loss_function, trainloader, num_epochs):
-        for epoch in range(0, num_epochs):
-
-            # Print epoch
-            print(f'Starting epoch {epoch + 1}')
-
-            # Set current loss value
-            current_loss = 0.0
-
-            # Iterate over the DataLoader for training data
-            for i, data in enumerate(trainloader, 0):
-
-                # Get inputs
-                inputs, targets = data
-
-                # Zero the gradients
-                optimizer.zero_grad()
-
-                # Perform forward pass
-                outputs = network(inputs)
-
-                # Compute loss
-                loss = loss_function(outputs, targets)
-
-                # Perform backward pass
-                loss.backward()
-
-                # Perform optimization
-                optimizer.step()
-
-                # Print statistics
-                current_loss += loss.item()
-                if i % 500 == 499:
-                    print('Loss after mini-batch %5d: %.3f' %
-                          (i + 1, current_loss / 500))
-                    current_loss = 0.0
-        # Process is complete.
-        print('Training process has finished. Not saving trained model.')
 
     def test(self, network, fold, testloader):
         # Print about testing
@@ -176,6 +143,8 @@ class CrossValidator:
         regu_early_start = 1
         regu_early_step = 0
         regu_weird=False
+        last_loss = 100
+        triggertimes = 0
         """
         Training loop to optimize a network for several epochs and a specified loss
 
@@ -192,8 +161,8 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        optimizer = LDoG(net.parameters())
-        averager = PolynomialDecayAverager(net)
+        #optimizer = #LDoG(net.parameters())
+        averager = None #PolynomialDecayAverager(net)
 
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
@@ -214,6 +183,7 @@ class CrossValidator:
         loss_win, val_win = None, None
         val_accuracies = []
         train_accuracies = []
+
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
@@ -228,31 +198,18 @@ class CrossValidator:
                 data, target = data.to(device), target.to(device)
                 optimizer.zero_grad()
                 reg = 0
-                if supervision == 'full':
-                    output = net(data)
-                    # target = target - 1
-                    loss = criterion(output, target)
-                    try:
-                        reg = net.regularization() if not regu_weird else regu_early_start*net.regularization()
-                    #TODO -specific error
-                    except:
-                        reg = 0
-                    # TODO add rego
-                    # if hasattr(net, "regularization"):
-                    #    reg = net.regularization()
-                    #    print("reg",reg.item(),"pure loss",loss)
-                    #print("reg", reg.item(), "loss", loss.item())
-                    loss = loss + reg
-                elif supervision == 'semi':
-                    outs = net(data)
-                    output, rec = outs
-                    # target = target - 1
-                    loss = criterion[0](output, target) + net.aux_loss_weight * criterion[1](rec, data)
-                else:
-                    raise ValueError("supervision mode \"{}\" is unknown.".format(supervision))
+                output = net(data)
+                # target = target - 1
+                loss = criterion(output, target)
+                try:
+                    reg = net.regularization() if not regu_weird else regu_early_start*net.regularization()
+                #TODO -specific error
+                except:
+                    reg = 0
+                loss = loss + reg
                 loss.backward()
                 optimizer.step()
-                if not averager is None:
+                if averager is not None:
                     averager.step()
                 avg_loss += loss.item()
                 losses[iter_] = loss.item()
@@ -289,6 +246,13 @@ class CrossValidator:
                                                      })
                 iter_ += 1
                 del (data, target, loss, output)
+            #Early stop
+            #print(last_loss,mean_losses[iter_-1],triggertimes)
+            triggertimes = triggertimes+1 if mean_losses[iter_-1] > last_loss else 0
+            last_loss = mean_losses[iter_-1]
+            #Early stop
+            if triggertimes >= CrossValidator.Patience:
+                break
             if self.save_gates_progression and hasattr(net, "feature_selector"):
                 curr_gates=net.feature_selector.get_gates('prob')
                 gates_progression=np.vstack((gates_progression, curr_gates))
@@ -302,6 +266,7 @@ class CrossValidator:
                 val_accuracies.append(val_acc)
                 train_acc = self.val(net, data_loader, device=device, supervision=supervision)
                 train_accuracies.append(train_acc)
+
         if self.save_gates_progression:
             print("Saving the gates progression image...")
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)

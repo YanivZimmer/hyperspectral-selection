@@ -89,6 +89,7 @@ def get_model(name, **kwargs):
             lam=kwargs["lam"],
             patch_size=patch_size,
             headstart_idx=kwargs["headstart_idx"],
+            device=kwargs["device"]
         )
         lr = kwargs.setdefault("learning_rate", 0.01)
         # different learning rates ls
@@ -97,8 +98,8 @@ def get_model(name, **kwargs):
         #    {"params": list(model.parameters())[1:], "lr": lr},
         #   {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
         #]
-        optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
-        #optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=0.0005)
+        #optimizer = optim.SGD(model.parameters(), lr=lr)#, weight_decay=0.0005)
+        optimizer = optim.Adam(model.parameters(), lr=lr)#, weight_decay=0.0005)
         #optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
         #optimizer = DoG(model.parameters())
         kwargs.setdefault("batch_size", 256)

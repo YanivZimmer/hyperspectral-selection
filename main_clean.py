@@ -14,7 +14,10 @@ For commercial use, please contact the authors.
 # Python 2/3 compatiblity
 from __future__ import division, print_function
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
+from common_utils.main_utils import Trainer
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 os.environ["WORLD_SIZE"] = "1"
 import torch
 #
@@ -29,7 +32,7 @@ import seaborn as sns
 import sklearn.svm
 # Torch
 import torch
-#torch.set_float32_matmul_precision('medium')
+torch.set_float32_matmul_precision('medium')
 import torch.utils.data as data
 import visdom
 from torchsummary import summary
@@ -267,7 +270,6 @@ def read_dict(filename):
     js = json.loads(data)
     return js
 
-
 # Load the dataset
 img, gt, LABEL_VALUES, IGNORED_LABELS, RGB_BANDS, palette = get_dataset(DATASET, FOLDER)
 # Number of classes
@@ -276,6 +278,7 @@ N_CLASSES = len(LABEL_VALUES)
 # Number of bands (last dimension of the image tensor)
 N_BANDS = img.shape[-1]
 
+
 if palette is None:
     # Generate color palette
     palette = {0: (0, 0, 0)}
@@ -283,14 +286,14 @@ if palette is None:
         palette[k + 1] = tuple(np.asarray(255 * np.array(color), dtype="uint8"))
 invert_palette = {v: k for k, v in palette.items()}
 
-
+'''
 def convert_to_color(x):
     return convert_to_color_(x, palette=palette)
 
 
 def convert_from_color(x):
     return convert_from_color_(x, palette=invert_palette)
-
+'''
 def get_hyperparams():
     hyperparams = vars(args)
 
@@ -306,97 +309,32 @@ def get_hyperparams():
     hyperparams = dict((k, v) for k, v in hyperparams.items() if v is not None)
     return hyperparams
 
-def view():
-    # Show the image and the ground truth
-    display_dataset(img, gt, RGB_BANDS, LABEL_VALUES, palette, viz)
-    color_gt = convert_to_color(gt)
-
-    if DATAVIZ:
-        # Data exploration : compute and show the mean spectrums
-        mean_spectrums = explore_spectrums(
-            img, gt, LABEL_VALUES, viz, ignored_labels=IGNORED_LABELS
-        )
-        plot_spectrums(mean_spectrums, viz, title="Mean spectrum/class")
-
-
 def model_creator_func(**hyperparams):
     # model, optimizer, loss, hyperparams
     return get_model(MODEL, **hyperparams)
 
-
-def train_test(lam, lr,lr_factor,reps_rel,use_stg = True,batch_size=512, n_folds=6,save_net = False):
-    algo_kfold = {}
-    bands_acc_mapping_total = {}
-    bands_kappa_mapping_total = {}
-    gates_acc_mapping_total = {}
+if __name__ == '__main__':
+    lm = LAM
+    #train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=False,batch_size=2048, save_net=False)
     hyperparams = get_hyperparams()
     results = []
-    if not use_stg:
-        all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
-    else:
-        all_algo_n_bands_to_selection = {"stg0" : []}
-    # run the experiment several times
-
-    bands_amount = [BANDS_AMOUNT]
+    all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
     train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
     train_gt, val_gt = sample_gt(train_gt, 0.999, mode="random")
     # Generate the dataset
-    hyperparams["headstart_idx"] = None# if use_stg else n_bands_to_selection[str(n_selected_bands)]
-    hyperparams["lam"] = lam
-    #hyperparams["reps_rel"] = reps_rel
-    model, optimizer, loss, hyperparams = get_model(MODEL, **hyperparams)
-    train_dataset = HyperX(img, train_gt, **hyperparams)
-    train_loader = data.DataLoader(train_dataset,
-                                   batch_size=hyperparams['batch_size'],
-                                   # pin_memory=hyperparams['device'],
-                                   shuffle=True, num_workers=8)
-    # CROSS VALIDATOR KFOLD
-    cross_validator = CrossValidator(display=viz, dataset=train_dataset, dataset_name=DATASET, n_folds=n_folds)
-    for algo in ['STG-PRESET']: #all_algo_n_bands_to_selection.keys():
-        bands_acc_mapping = {}
-        bands_f1_mapping = {}
-        bands_kappa_mapping = {}
-        gates_to_acc = {}
-        print("algo = ", algo)
-        n_bands_to_selection = all_algo_n_bands_to_selection[algo]
-        for n_selected_bands in bands_amount:
-            for run in range(N_RUNS):
-                print(
-                    "{} samples selected (over {})".format(
-                        np.count_nonzero(train_gt), np.count_nonzero(gt)
-                    )
-                )
-                print("Running an experiment with the {} model".format(MODEL))
-                # "run {}/{}".format(run + 1, N_RUNS))
-                display_predictions(
-                    convert_to_color(train_gt), viz, caption="Train ground truth"
-                )
-                display_predictions(
-                    convert_to_color(test_gt), viz, caption="Test ground truth"
-                )
-
-                if CLASS_BALANCING:
-                    weights = compute_imf_weights(train_gt, N_CLASSES, IGNORED_LABELS)
-                    hyperparams["weights"] = torch.from_numpy(weights)
-                # set headstart idx if not using stg and just testing other
-                hyperparams["headstart_idx"] = None if use_stg else n_bands_to_selection[str(n_selected_bands)]
-                hyperparams["lam"] = lam
-                # Neural network
-                model, optimizer, loss, hyperparams = get_model(MODEL, **hyperparams)
-                # Set number of selected features
-                #if hasattr(model, "k"):
-                #    model.k = n_selected_bands
-                kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams),
-                                               num_of_epochs=EPOCH,
-                                               lam=lam,algo_name=algo,batch_size=batch_size)
-                #gates,n0_gates,n1_gates = get_non_zero_bands(model)
-                algo_kfold[algo] = kfold_res
-    print(algo_kfold)
-    return algo_kfold
-
-
-if __name__ == '__main__':
-    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=False,n_folds=6,batch_size=256, save_net=False)
-
-
+    hyperparams["headstart_idx"] = None  # if use_stg else n_bands_to_selection[str(n_selected_bands)]
+    hyperparams["lam"] = LAM
+    #cctor mess with hyperparams
+    #hyperparams1=dict(hyperparams)
+    trainer = Trainer(model_creator=lambda: model_creator_func(**hyperparams),mode_name=MODEL, img=img, gt=train_gt,
+                      display=viz,device=CUDA_DEVICE,hyperparams1=hyperparams)
+    losses = {}
+    regs = {}
+    for opt in ['DOG','SGD','ADAM']:
+        hyperparams["lam"] = lm
+        model, _, loss, hyperparams = get_model(MODEL, **hyperparams)
+        losses[opt],regs[opt] = trainer.train(net=model, optimizer_name=opt, criterion=loss, epoch=EPOCH,
+                      lam=lm, display_iter=100, device=torch.device('cuda'), display=viz)
+        acc, gates, _, _ = trainer.test(net=model)
+        print(opt,acc,losses)
 #hamida
