@@ -104,7 +104,7 @@ class FeatureSelector(nn.Module):
         print(sorted(headstart_idx))
         headstart_mask = torch.zeros(self.input_dim).to(self.device)
         self.headstart_idx = sorted(headstart_idx)
-        shifted_vector = np.array(headstart_idx) - 1
+        shifted_vector = np.array(headstart_idx) #- 1
         headstart_mask[shifted_vector] = 1
         if const_mask:
             self.mask = headstart_mask

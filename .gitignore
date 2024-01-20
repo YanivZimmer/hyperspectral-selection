@@ -162,3 +162,10 @@ cython_debug/
 *.pth
 *.json
 *.png
+PaviaU/
+PaviaU1/
+PaviaU2/
+Salinas/
+Salinas1/
+Salinas2/
+.idea

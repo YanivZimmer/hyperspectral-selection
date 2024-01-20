@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from models.baseline import Baseline, BaselineFS
-from models.hamida import HamidaEtAl, HamidaFS
+from models.hamida import HamidaEtAl, HamidaFS, HamidaL1
 from models.extra_models import *
 
 
@@ -72,6 +72,14 @@ def get_model(name, **kwargs):
         # optimizer = optim.Adam(model.parameters(), lr=lr)
         kwargs.setdefault("batch_size", 100)
         criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "hamida_l1":
+        patch_size = kwargs.setdefault("patch_size", 5)
+        center_pixel = True
+        model = HamidaL1(n_bands, n_classes, lam=kwargs["lam"], patch_size=patch_size)
+        lr = kwargs.setdefault("learning_rate", 0.01)
+        optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
+        kwargs.setdefault("batch_size", 100)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
     elif name == "hamida_fs":
         patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = True
@@ -81,16 +89,19 @@ def get_model(name, **kwargs):
             lam=kwargs["lam"],
             patch_size=patch_size,
             headstart_idx=kwargs["headstart_idx"],
+            device=kwargs["device"]
         )
         lr = kwargs.setdefault("learning_rate", 0.01)
         # different learning rates ls
 
-        modified_lr = [
-            {"params": list(model.parameters())[1:], "lr": lr},
-            {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
-        ]
-        # optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
-        optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
+        #modified_lr = [
+        #    {"params": list(model.parameters())[1:], "lr": lr},
+        #   {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
+        #]
+        #optimizer = optim.SGD(model.parameters(), lr=lr)#, weight_decay=0.0005)
+        optimizer = optim.Adam(model.parameters(), lr=0.001)#, weight_decay=0.0005)
+        #optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
+        #optimizer = None#LDoG(model.parameters())
         kwargs.setdefault("batch_size", 256)
         criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
     elif name == "lee":
@@ -247,3 +258,4 @@ def get_model(name, **kwargs):
     kwargs.setdefault("mixture_augmentation", False)
     kwargs["center_pixel"] = center_pixel
     return model, optimizer, criterion, kwargs
+#
