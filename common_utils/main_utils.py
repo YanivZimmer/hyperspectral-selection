@@ -3,6 +3,7 @@ from typing import List, Callable
 import numpy as np
 import torch
 from dog import LDoG, PolynomialDecayAverager
+from matplotlib import pyplot as plt
 from torch.optim import Adam,SGD
 from torch.utils import data
 from torch.utils.data import random_split
@@ -46,12 +47,12 @@ class Trainer:
                                             shuffle=False, num_workers=8)
 
     def train(self, net, optimizer_name:str, criterion, epoch,
-              lam=1,display_iter=100,device=torch.device('cuda'), display=None,
+              lam=1.0,lr=0.01,display_iter=100,device=torch.device('cuda:0'), display=None,
               val_loader=None,algo_name=None):
         regu_early_start = 1
         regu_early_step = 0
         regu_weird=False
-        lr=0.01
+
         data_loader = self.train_loader
         """
         Training loop to optimize a network for several epochs and a specified loss
@@ -69,13 +70,26 @@ class Trainer:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        averager = None
+        averager = PolynomialDecayAverager(net)
         if optimizer_name == 'DOG':
             optimizer = LDoG(net.parameters())
-            averager = PolynomialDecayAverager(net)
+        elif optimizer_name == 'DOG4':
+            optimizer = LDoG(net.parameters(),reps_rel=1e-4)
+        elif optimizer_name == 'DOG45':
+            optimizer = LDoG(net.parameters(),reps_rel=4*1e-5)
+        elif optimizer_name == 'DOG5':
+            optimizer = LDoG(net.parameters(),reps_rel=1e-5)
+        elif optimizer_name == 'DOG8':
+            optimizer = LDoG(net.parameters(),reps_rel=1e-8)
+        elif optimizer_name == 'DOG9':
+            optimizer = LDoG(net.parameters(),reps_rel=1e-9)
+        elif optimizer_name == 'DOG10':
+            optimizer = LDoG(net.parameters(),reps_rel=1e-10)
         elif optimizer_name == 'ADAM':
+            averager = None
             optimizer = Adam(net.parameters(),lr=lr)
         elif optimizer_name == 'SGD':
+            averager = None
             optimizer = SGD(net.parameters(),lr=lr)
         else:
             print("Unrecognized optimizer name")
@@ -90,23 +104,25 @@ class Trainer:
         net.to(device)
 
         save_epoch = epoch // 20 if epoch > 20 else 1
-
+        ep_loss=[]
+        ep_reg=[]
         losses = np.zeros(1000000)
         regs = np.zeros(1000000)
         mean_losses = np.zeros(100000000)
         mean_regs = np.zeros(100000000)
-        iter_ = 1
+        iter_ = 0
         loss_win, val_win = None, None
         val_accuracies = []
         train_accuracies = []
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
+            #self.get_top_gates(net)
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
                 print("Discount factor=", regu_early_start)
             # Set the network to training mode
             net.train()
             avg_loss = 0.
-
+            avg_reg = 0.
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
                 # Load the data into the GPU if required
@@ -115,9 +131,11 @@ class Trainer:
                 reg = 0
                 output = net(data)
                 # target = target - 1
+                output = output.to(device)
+                target = target.to(device)
                 loss = criterion(output, target)
                 try:
-                    reg = net.regularization() if not regu_weird else regu_early_start*net.regularization()
+                    reg = lam * net.regularization() if not regu_weird else regu_early_start*net.regularization()
                 #TODO -specific error
                 except Exception as e:
                     print(e)
@@ -128,6 +146,7 @@ class Trainer:
                 if not averager is None:
                     averager.step()
                 avg_loss += loss.item()
+                avg_reg += reg.item()
                 losses[iter_] = loss.item()
                 mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_ + 1])
                 regs[iter_] = reg
@@ -140,27 +159,9 @@ class Trainer:
                                   len(data), len(data) * len(data_loader),
                                   100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_])
                     update = None if loss_win is None else 'append'
-                    loss_win = display.line(
-                        X=np.arange(iter_ - display_iter, iter_),
-                        Y=mean_losses[iter_ - display_iter:iter_],
-                        win=loss_win,
-                        update=update,
-                        opts={'title': "Training loss",
-                              'xlabel': "Iterations",
-                              'ylabel': "Loss"
-                              }
-                    )
-                    tqdm.write(string)
-                    if len(val_accuracies) > 0:
-                        val_win = display.line(Y=np.array(val_accuracies),
-                                               X=np.arange(len(val_accuracies)),
-                                               win=val_win,
-                                               opts={'title': "Validation accuracy",
-                                                     'xlabel': "Epochs",
-                                                     'ylabel': "Accuracy"
-                                                     })
                 iter_ += 1
                 del (data, target, loss, output)
+
             '''if self.save_gates_progression and hasattr(net, "feature_selector"):
                 curr_gates = net.feature_selector.get_gates('prob')
                 gates_progression = np.vstack((gates_progression, curr_gates))
@@ -168,6 +169,9 @@ class Trainer:
                 print(gates_progression.shape)'''
             # Update the scheduler
             avg_loss /= len(data_loader)
+            ep_loss.append(avg_loss)
+            avg_reg /= len(data_loader)
+            ep_reg.append(avg_reg)
             metric = avg_loss
             if val_loader is not None:
                 val_acc = self.val(net, val_loader, device=device)
@@ -180,7 +184,8 @@ class Trainer:
             self.visualizer.gates_progression_image(self.dataset_name,gates_progression,fold,lam,gates_prob_one)
         if val_loader is not None:
             self.visualizer.save_acc_plot(self.dataset_name,train=train_accuracies,val=val_accuracies,algo_name=algo_name,fold=fold,lam=lam,optimizer=optimizer)'''
-        return losses[:iter_],regs[:iter_]
+        return ep_loss,ep_reg
+        #return losses[:iter_],regs[:iter_]
 
     def val(self,net, data_loader, device=torch.device('cuda')):
         # TODO : fix me using metrics()
@@ -202,12 +207,17 @@ class Trainer:
                         total += 1
         return accuracy / total
 
+    def get_top_gates(self,net):
+        gates = torch.abs(torch.Tensor(net.get_gates("prob")))
+        gates_args = np.argwhere(np.array(gates.cpu() > 0.001)).flatten().tolist()
+        #print("over threshold=",len(gates_args))
+        #print("top==",torch.argsort(gates, descending=True))
+
     def test(self, net):
-        fold = 0
         testloader = self.test_loader
         # Print about testing
         print('Starting testing')
-
+        self.get_top_gates(net)
         # Evaluationfor this fold
         correct, total = 0, 0
         with torch.no_grad():
@@ -225,14 +235,14 @@ class Trainer:
                 correct += (predicted == targets.to(self.device)).sum().item()
 
             # Print accuracy
-            print('Accuracy for fold %d: %d %%' % (fold, 100.0 * correct / total))
+            print('Accuracy %d %%' % (100.0 * correct / total))
             print('--------------------------------')
-            gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(net)
             #TODO add visualization
             #if self.log_last_gates:
             #    self.visualizer.write_last_gates(self.dataset_name,gates,gates_prob_one)
             #return results of test
-            return 100.0 * (correct / total), gates, gates_prob_one, gates_positive_prob
+            gates,gates_prob_one, gates_positive_prob =self.get_non_zero_bands(net)
+            return 100.0 * (correct / total),gates,gates_prob_one, gates_positive_prob
 
     def get_non_zero_bands(self,net):
         if not hasattr(net, "get_gates"):
@@ -241,6 +251,23 @@ class Trainer:
         if gates is None:
             return None, 0, 0
         return gates, sum(gates == 1), sum(gates > 0)
+
+    def draw_optimizer(self, optimizer_loss, optimizer_reg,accuracy_data,lam,n_gates):
+        for i,name in enumerate(optimizer_loss.keys()):
+            # Loss plot
+            color  =plt.plot(range(len(optimizer_reg[name])), optimizer_reg[name], label=f'Reg ({name})')[0].get_color()
+            # Regularization plot with stars
+            plt.scatter(range(len(optimizer_loss[name])), optimizer_loss[name], marker='D', s=2, label=f'Loss({name})',color=color)
+            plt.text(0.05, 0.95 - 0.05 * i,
+                     f'{name} Accuracy: {accuracy_data[name]:.2f}%',
+                     transform=plt.gca().transAxes,color=color)
+
+        plt.suptitle('Loss and Regularization over Different Optimizers')
+        plt.title(f'Lambda = {lam} # Chosen Bands = {n_gates}')
+        plt.xlabel('Epochs')
+        #plt.ylabel('Values')
+        plt.legend()
+        plt.savefig(f'/home/dsi/yanivz/hyperspectral-selection/results/optim_experiment_lam_{lam}.png')
 
     def run_stg_once(self,lam,num_of_epochs, batch_size=512, **hyperparams1) -> (List,int):
         '''

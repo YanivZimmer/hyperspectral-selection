@@ -2,6 +2,7 @@
 import os
 from typing import Callable
 from common_utils.visualizer import Visualizer
+import torch.optim as optim
 
 import numpy as np
 import torch
@@ -12,7 +13,6 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import uuid
 uuid.uuid4()
-K_FOLDS = 10
 N_BANDS = 103
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 from dog import LDoG
@@ -20,7 +20,7 @@ from dog import PolynomialDecayAverager
 
 class CrossValidator:
     Patience = 5
-    def __init__(self, display, dataset, dataset_name, n_folds = K_FOLDS):
+    def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
 
         self.n_folds = n_folds
         self.display = display
@@ -28,6 +28,7 @@ class CrossValidator:
         self.dataset_name = dataset_name
         self.visualizer = Visualizer()
         self.log_last_gates = False
+        self.patch_size = patch_size
         self.save_gates_progression = False
         kfold = KFold(n_splits=self.n_folds, shuffle=True)
         self.folds = list(kfold.split(dataset))
@@ -66,12 +67,13 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                       display_iter=100, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
+                       display_iter=1000, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
+            print(results[fold], gates_idx[fold])    
             gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
             #TODO- this should not stay, just a temp for running only one fold
             #break
@@ -92,7 +94,7 @@ class CrossValidator:
         str_base += f"num_gates_prob_one {num_gates_prob_one}\n"
         print("num_gates_positive_prob", num_gates_positive_prob)
         str_base += f"num_gates_positive_prob {num_gates_positive_prob}\n"
-        return str_base
+        return str_base,gates_idx_all
 
 
     def test(self, network, fold, testloader):
@@ -100,8 +102,8 @@ class CrossValidator:
         print('Starting testing')
 
         # Saving the model
-        save_path = f'./model-fold-{fold}.pth'
-        torch.save(network.state_dict(), save_path)
+        #save_path = f'./model-fold-{fold}.pth'
+        #torch.save(network.state_dict(), save_path)
 
         # Evaluationfor this fold
         correct, total = 0, 0
@@ -125,7 +127,8 @@ class CrossValidator:
             print('--------------------------------')
             gates, gates_prob_one, gates_positive_prob = self.get_non_zero_bands(network)
             if self.log_last_gates:
-                self.visualizer.write_last_gates(self.dataset_name,gates,gates_prob_one)
+                self.visualizer.write_last_gates(f'{self.dataset_name}_{self.patch_size}',
+                                                 gates,gates_prob_one)
             #return results of test
             return 100.0 * (correct / total), gates, gates_prob_one, gates_positive_prob
 
@@ -161,9 +164,9 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        #optimizer = #LDoG(net.parameters())
-        averager = None #PolynomialDecayAverager(net)
-
+        optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
+        averager = PolynomialDecayAverager(net)
+        #optimizer= optim.Adam(net.parameters(), lr=0.002)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -194,6 +197,12 @@ class CrossValidator:
 
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
+                if self.save_gates_progression and hasattr(net, "feature_selector"):
+                    curr_gates = net.feature_selector.get_gates('prob')
+                    gates_progression = np.vstack((gates_progression, curr_gates))
+                    print("epoch", e, "batch_idx", batch_idx)
+                    #print(curr_gates.shape)
+                    #print(gates_progression.shape)
                 # Load the data into the GPU if required
                 data, target = data.to(device), target.to(device)
                 optimizer.zero_grad()
@@ -253,11 +262,13 @@ class CrossValidator:
             #Early stop
             if triggertimes >= CrossValidator.Patience:
                 break
-            if self.save_gates_progression and hasattr(net, "feature_selector"):
-                curr_gates=net.feature_selector.get_gates('prob')
-                gates_progression=np.vstack((gates_progression, curr_gates))
-                print(curr_gates.shape)
-                print(gates_progression.shape)
+            #gates progression
+            #
+            # if self.save_gates_progression and hasattr(net, "feature_selector"):
+            #     curr_gates=net.feature_selector.get_gates('prob')
+            #     gates_progression=np.vstack((gates_progression, curr_gates))
+            #     print(curr_gates.shape)
+            #     print(gates_progression.shape)
             # Update the scheduler
             avg_loss /= len(data_loader)
             metric = avg_loss
@@ -297,3 +308,4 @@ class CrossValidator:
                         accuracy += out.item() == pred.item()
                         total += 1
         return accuracy / total
+        #

@@ -135,6 +135,7 @@ class HamidaL1(HamidaEtAl, FeatureSelectionL1Wrapper):
         self,
         input_channels,
         n_classes,
+        lam,
         patch_size=5,
         dilation=1,
         device="cuda:0",
@@ -142,7 +143,7 @@ class HamidaL1(HamidaEtAl, FeatureSelectionL1Wrapper):
         HamidaEtAl.__init__(
             self, input_channels, n_classes, patch_size=patch_size, dilation=dilation
         )
-        FeatureSelectionL1Wrapper.__init__(self, input_channels)
+        FeatureSelectionL1Wrapper.__init__(self, input_channels,lam)
 
     def forward(self, x):
         x = FeatureSelectionL1Wrapper.forward(self=self, x=x)

@@ -17,9 +17,10 @@ import os
 
 from common_utils.main_utils import Trainer
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
-os.environ["WORLD_SIZE"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+#os.environ["WORLD_SIZE"] = "1"
 import torch
+
 #
 #import os
 import argparse
@@ -313,9 +314,18 @@ def model_creator_func(**hyperparams):
     # model, optimizer, loss, hyperparams
     return get_model(MODEL, **hyperparams)
 
+def add_or_append(key,value,res_dict):
+    if key not in res_dict:
+        res_dict[key] = [value]
+    else:
+        res_dict[key].append(value)
+def nice_print(res_dict):
+    print("res_dict")
+    for key,value in res_dict.items():
+        print(key,"=",value)
+
 if __name__ == '__main__':
-    lm = LAM
-    #train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=False,batch_size=2048, save_net=False)
+    #lm = LAM
     hyperparams = get_hyperparams()
     results = []
     all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
@@ -330,11 +340,32 @@ if __name__ == '__main__':
                       display=viz,device=CUDA_DEVICE,hyperparams1=hyperparams)
     losses = {}
     regs = {}
-    for opt in ['DOG','SGD','ADAM']:
-        hyperparams["lam"] = lm
-        model, _, loss, hyperparams = get_model(MODEL, **hyperparams)
-        losses[opt],regs[opt] = trainer.train(net=model, optimizer_name=opt, criterion=loss, epoch=EPOCH,
-                      lam=lm, display_iter=100, device=torch.device('cuda'), display=viz)
-        acc, gates, _, _ = trainer.test(net=model)
-        print(opt,acc,losses)
-#hamida
+    accs = {}
+    opt_to_gates = {}
+    #
+    x = 0.5
+    y = 2.1
+    step = 0.2
+    opt_with_lr_to_bands_acc={}
+    for lr in reversed([0.001]):
+        nice_print(opt_with_lr_to_bands_acc)
+        for lm in np.arange(x, y + step, step):
+            for opt in ['ADAM', 'DOG']:#,'DOG5','DOG']:#,'DOG8','DOG9','DOG10','DOG5','DOG4','SGD','ADAM']:
+                opt_with_lr_lam = f'{opt}_{lr}_{lm}'
+                short_key = f'{opt}_{lr}'
+                hyperparams["lam"] = lm
+                model, _, loss, hyperparams = get_model(MODEL, **hyperparams)
+                losses[opt_with_lr_lam], regs[opt_with_lr_lam] = trainer.train(net=model, optimizer_name=opt, criterion=loss, epoch=EPOCH,
+                              lam=lm, lr=lr, display_iter=1000, device=torch.device('cuda'), display=viz)
+                acc, gates, gates_prob_one, gates_positive_prob = trainer.test(net=model)
+                accs[opt_with_lr_lam] = acc
+                opt_to_gates[opt_with_lr_lam] = gates_prob_one
+                if short_key not in opt_with_lr_to_bands_acc:
+                    opt_with_lr_to_bands_acc[short_key]={}
+                add_or_append(gates_positive_prob,acc,opt_with_lr_to_bands_acc[short_key])
+                print(opt,lm,lr, "prob1", gates_prob_one, "prob_pos", gates_positive_prob, acc)
+    #print("losses", losses)
+    #print("regs", regs)
+    # #print("acc", acc)
+    nice_print(opt_with_lr_to_bands_acc)
+    trainer.draw_optimizer(losses, regs, accs, lm, 999)

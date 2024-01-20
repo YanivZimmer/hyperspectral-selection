@@ -75,7 +75,7 @@ def get_model(name, **kwargs):
     elif name == "hamida_l1":
         patch_size = kwargs.setdefault("patch_size", 5)
         center_pixel = True
-        model = HamidaL1(n_bands, n_classes, patch_size=patch_size)
+        model = HamidaL1(n_bands, n_classes, lam=kwargs["lam"], patch_size=patch_size)
         lr = kwargs.setdefault("learning_rate", 0.01)
         optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=0.0005)
         kwargs.setdefault("batch_size", 100)
@@ -99,9 +99,9 @@ def get_model(name, **kwargs):
         #   {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
         #]
         #optimizer = optim.SGD(model.parameters(), lr=lr)#, weight_decay=0.0005)
-        optimizer = optim.Adam(model.parameters(), lr=lr)#, weight_decay=0.0005)
+        optimizer = optim.Adam(model.parameters(), lr=0.001)#, weight_decay=0.0005)
         #optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
-        #optimizer = DoG(model.parameters())
+        #optimizer = None#LDoG(model.parameters())
         kwargs.setdefault("batch_size", 256)
         criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
     elif name == "lee":
@@ -258,3 +258,4 @@ def get_model(name, **kwargs):
     kwargs.setdefault("mixture_augmentation", False)
     kwargs["center_pixel"] = center_pixel
     return model, optimizer, criterion, kwargs
+#

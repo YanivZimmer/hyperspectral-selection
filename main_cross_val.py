@@ -14,8 +14,8 @@ For commercial use, please contact the authors.
 # Python 2/3 compatiblity
 from __future__ import division, print_function
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-os.environ["WORLD_SIZE"] = "1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+#os.environ["WORLD_SIZE"] = "1"
 import torch
 #
 #import os
@@ -324,8 +324,7 @@ def model_creator_func(**hyperparams):
     return get_model(MODEL, **hyperparams)
 
 
-def train_test(lam, lr,lr_factor,reps_rel,use_stg = True,batch_size=512, n_folds=6,save_net = False):
-    algo_kfold = {}
+def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
     bands_acc_mapping_total = {}
     bands_kappa_mapping_total = {}
     gates_acc_mapping_total = {}
@@ -351,15 +350,15 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True,batch_size=512, n_folds
                                    # pin_memory=hyperparams['device'],
                                    shuffle=True, num_workers=8)
     # CROSS VALIDATOR KFOLD
-    cross_validator = CrossValidator(display=viz, dataset=train_dataset, dataset_name=DATASET, n_folds=n_folds)
-    for algo in ['STG-PRESET']: #all_algo_n_bands_to_selection.keys():
-        bands_acc_mapping = {}
-        bands_f1_mapping = {}
-        bands_kappa_mapping = {}
-        gates_to_acc = {}
-        print("algo = ", algo)
+    cross_validator = CrossValidator(display=viz, dataset=train_dataset,
+                                     dataset_name=DATASET, n_folds=n_folds,patch_size=PATCH_SIZE)
+    gates_idx_mapping = {}
+    algo_n_bands_acc = {}
+    bands_amount = [17,21,25]#[BANDS_AMOUNT]
+    for algo in ['L1']:#all_algo_n_bands_to_selection.keys(): #['STG-PRESET','BS-NETS-Conv','BS-NETS-FC','ISSC','WALUMI','WALUDI']:#
         n_bands_to_selection = all_algo_n_bands_to_selection[algo]
         for n_selected_bands in bands_amount:
+            algo_kfold = {}
             for run in range(N_RUNS):
                 print(
                     "{} samples selected (over {})".format(
@@ -382,21 +381,43 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True,batch_size=512, n_folds
                 hyperparams["headstart_idx"] = None if use_stg else n_bands_to_selection[str(n_selected_bands)]
                 hyperparams["lam"] = lam
                 # Neural network
-                model, optimizer, loss, hyperparams = get_model(MODEL, **hyperparams)
+                model, _, loss, hyperparams = get_model(MODEL, **hyperparams)
+                #optimizer = optim.Adam(model.parameters(), lr=0.001)
+                #optimizer = LDoG(model.parameters())
                 # Set number of selected features
                 #if hasattr(model, "k"):
                 #    model.k = n_selected_bands
-                kfold_res=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams),
+                kfold_res,gates_idx_all=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams),
                                                num_of_epochs=EPOCH,
                                                lam=lam,algo_name=algo,batch_size=batch_size)
                 #gates,n0_gates,n1_gates = get_non_zero_bands(model)
                 algo_kfold[algo] = kfold_res
-    print(algo_kfold)
-    return algo_kfold
+                if use_stg:
+                    gates_idx_mapping[algo] = gates_idx_all
+            algo_n_bands_acc[n_selected_bands] = algo_kfold
+    print(algo_n_bands_acc,gates_idx_mapping)
+    return algo_n_bands_acc,gates_idx_mapping
 
 
 if __name__ == '__main__':
-    train_test(lam=LAM, lr=0.1, lr_factor=1, reps_rel=1e-6, use_stg=False,n_folds=6,batch_size=256, save_net=False)
-
-
+    train_test(lam=LAM, use_stg=False, n_folds=5, batch_size=256, save_net=False)
+    #x = 2
+    #y = 5
+    # x=5
+    # y=6
+    # step = 0.25
+    # temp = {}
+    # for lam in np.arange(x, y + step, step):
+    #     print("lam", lam)
+    #     temp[lam] = train_test(lam=lam, use_stg=True, n_folds=5, batch_size=256, save_net=False)
+    #x=0.5
+    #y=2
+    #step = 0.25
+    #temp = {}
+    #for lam in np.arange(x, y + step, step):
+    #    print("lam", lam)
+    #    temp[lam] = train_test(lam=lam, use_stg=True, n_folds=5, batch_size=256, save_net=False)
+    #print("done")
+    #print(temp)
 #hamida
+#
