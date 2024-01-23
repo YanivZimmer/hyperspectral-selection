@@ -67,7 +67,7 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                       display_iter=1000, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
+                       display_iter=100, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
@@ -164,8 +164,8 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
-        averager = PolynomialDecayAverager(net)
+        #optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
+        averager = None# PolynomialDecayAverager(net)
         #optimizer= optim.Adam(net.parameters(), lr=0.002)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:

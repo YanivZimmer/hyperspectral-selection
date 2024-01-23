@@ -355,7 +355,7 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
     gates_idx_mapping = {}
     algo_n_bands_acc = {}
     bands_amount = [17,21,25]#[BANDS_AMOUNT]
-    for algo in ['L1']:#all_algo_n_bands_to_selection.keys(): #['STG-PRESET','BS-NETS-Conv','BS-NETS-FC','ISSC','WALUMI','WALUDI']:#
+    for algo in all_algo_n_bands_to_selection.keys(): #['STG-PRESET','BS-NETS-Conv','BS-NETS-FC','ISSC','WALUMI','WALUDI']:#
         n_bands_to_selection = all_algo_n_bands_to_selection[algo]
         for n_selected_bands in bands_amount:
             algo_kfold = {}
@@ -400,7 +400,7 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
 
 
 if __name__ == '__main__':
-    train_test(lam=LAM, use_stg=False, n_folds=5, batch_size=256, save_net=False)
+    train_test(lam=LAM, use_stg=True, n_folds=5, batch_size=256, save_net=False)
     #x = 2
     #y = 5
     # x=5

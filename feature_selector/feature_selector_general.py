@@ -63,9 +63,12 @@ class FeatureSelector(nn.Module):
         if len(x.shape) == 2:
             return x * stochastic_gate
         x = x.squeeze()
-        x = torch.transpose(x, 1, 3)
-        x = x * stochastic_gate
-        x = torch.transpose(x, 1, 3)
+        k = int(0.2*x.shape[1])
+        topk = torch.topk(stochastic_gate, k).indices
+        #x = torch.transpose(x, 1, 3)
+        #x = x * stochastic_gate
+        #x = torch.transpose(x, 1, 3)
+        x = x[:,topk]
         return x.unsqueeze(1)
 
     def hard_sigmoid(self, x):

@@ -99,7 +99,7 @@ def get_model(name, **kwargs):
         #   {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
         #]
         #optimizer = optim.SGD(model.parameters(), lr=lr)#, weight_decay=0.0005)
-        optimizer = optim.Adam(model.parameters(), lr=0.001)#, weight_decay=0.0005)
+        optimizer = optim.Adam(model.parameters(), lr=0.0001)#, weight_decay=0.0005)
         #optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)
         #optimizer = None#LDoG(model.parameters())
         kwargs.setdefault("batch_size", 256)
