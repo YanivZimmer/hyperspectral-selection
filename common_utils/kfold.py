@@ -165,8 +165,8 @@ class CrossValidator:
             supervision (optional): 'full' or 'semi'
         """
         #optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
-        averager = None# PolynomialDecayAverager(net)
-        #optimizer= optim.Adam(net.parameters(), lr=0.002)
+        averager = None#PolynomialDecayAverager(net)
+        optimizer= optim.Adam(net.parameters(), lr=0.0025)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -194,7 +194,7 @@ class CrossValidator:
             # Set the network to training mode
             net.train()
             avg_loss = 0.
-
+            print(net.feature_selector.get_gates('prob'))
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
                 if self.save_gates_progression and hasattr(net, "feature_selector"):
@@ -210,12 +210,13 @@ class CrossValidator:
                 output = net(data)
                 # target = target - 1
                 loss = criterion(output, target)
+                reg = 0
                 try:
                     reg = net.regularization() if not regu_weird else regu_early_start*net.regularization()
                 #TODO -specific error
                 except:
                     reg = 0
-                loss = loss + reg
+                loss = loss + 0.01 * reg
                 loss.backward()
                 optimizer.step()
                 if averager is not None:
