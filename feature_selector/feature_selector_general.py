@@ -47,6 +47,20 @@ class FeatureSelector(nn.Module):
         #    x[idx] = (x[idx].T*mask_1d).T
         return x
 
+    def get_topk_stable(self,input_tensor,k):
+        values, indices = torch.topk(input_tensor, k=k, largest=True)
+
+        # Get the k-th largest value
+        kth_value = values[-1]
+
+        # Find the indices where the values are greater than the k-th value
+        above_k_indices = torch.nonzero(input_tensor >= kth_value).squeeze()
+
+        # Get the first k indices
+        first_k_above_k_indices = above_k_indices[:k]
+        first_k_above_k_indices = torch.sort(first_k_above_k_indices).values
+        return first_k_above_k_indices
+
     def forward(self, x):
         discount = 1
         if self.mask is not None:
@@ -63,9 +77,11 @@ class FeatureSelector(nn.Module):
         if len(x.shape) == 2:
             return x * stochastic_gate
         x = x.squeeze()
-        k = int(0.05*x.shape[1])
-        topk = torch.topk(stochastic_gate, k,sorted = True).indices
-        topk = torch.sort(topk).values
+        #k = int(0.05*x.shape[1])
+        k = int(0.05 * stochastic_gate.shape[0])
+        #topk = torch.topk(stochastic_gate, k,sorted = True).indices
+        #topk = torch.sort(topk).values
+        topk = self.get_topk_stable(stochastic_gate,k)
         x = x[:, topk]
         x = torch.transpose(x, 1, 3)
         x = x * stochastic_gate[topk]

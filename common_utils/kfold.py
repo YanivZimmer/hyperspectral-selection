@@ -13,7 +13,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import uuid
 uuid.uuid4()
-N_BANDS = 103
+N_BANDS = 204
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 from dog import LDoG
 from dog import PolynomialDecayAverager
@@ -87,8 +87,12 @@ class CrossValidator:
             str_base += f'Fold {key}: {value}'
             str_base += os.linesep
             sum += value
-        print(f'Average: {sum / len(results.items())} %')
-        str_base += f'Average: {sum / len(results.items())}'
+        avg_str = f'Average: {sum / len(results.items())} % '
+        print(avg_str)
+        std = statistics.stdev(results.values())
+        std_str = f'Standard deviation: {std}'
+        print(std_str)
+        str_base += std_str + std_str
         str_base += os.linesep
         print("num_gates_prob_one", num_gates_prob_one)
         str_base += f"num_gates_prob_one {num_gates_prob_one}\n"
@@ -164,9 +168,9 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        #optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
-        averager = None#PolynomialDecayAverager(net)
-        optimizer= optim.Adam(net.parameters(), lr=0.0025)
+        optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
+        averager = PolynomialDecayAverager(net)
+        #optimizer= optim.Adam(net.parameters(), lr=0.005)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -216,7 +220,7 @@ class CrossValidator:
                 #TODO -specific error
                 except:
                     reg = 0
-                loss = loss + 0.01 * reg
+                loss = loss + 0.025 * reg
                 loss.backward()
                 optimizer.step()
                 if averager is not None:
