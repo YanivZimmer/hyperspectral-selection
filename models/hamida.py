@@ -110,9 +110,10 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
         sigma=0.5,
         headstart_idx=None,
         device="cuda:0",
+        target_number=10        
     ):
         HamidaEtAl.__init__(
-            self, int(0.05*input_channels), n_classes, patch_size=patch_size, dilation=dilation
+            self, target_number, n_classes, patch_size=patch_size, dilation=dilation
         )
 
         FeatureSelectionWrapper.__init__(

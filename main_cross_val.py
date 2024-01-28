@@ -354,8 +354,9 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
                                      dataset_name=DATASET, n_folds=n_folds,patch_size=PATCH_SIZE)
     gates_idx_mapping = {}
     algo_n_bands_acc = {}
-    bands_amount = [17,21,25]#[BANDS_AMOUNT]
+    bands_amount = [BANDS_AMOUNT]
     for algo in all_algo_n_bands_to_selection.keys(): #['STG-PRESET','BS-NETS-Conv','BS-NETS-FC','ISSC','WALUMI','WALUDI']:#
+        print(algo)
         n_bands_to_selection = all_algo_n_bands_to_selection[algo]
         for n_selected_bands in bands_amount:
             algo_kfold = {}

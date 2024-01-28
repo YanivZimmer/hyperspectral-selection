@@ -15,9 +15,11 @@ def create_boolean_tensor(vector, size):
 class FeatureSelector(nn.Module):
     def __init__(self, input_dim, sigma, device, headstart_idx=None):
         super(FeatureSelector, self).__init__()
+        self.target_number = 10
         self.device = device
         self.input_dim = input_dim
         self.headstart_idx_to_tensor(headstart_idx)
+        self.headstart_idx=headstart_idx
         self.mu = torch.nn.Parameter(
             0.01
             * torch.randn(
@@ -63,6 +65,10 @@ class FeatureSelector(nn.Module):
 
     def forward(self, x):
         discount = 1
+        if self.headstart_idx is not None:
+          x=x[:,:,self.headstart_idx]
+          #print(x.shape)
+          return x
         if self.mask is not None:
             if len(x.shape) == 2:
                 return x * self.mask.to(x.device)
@@ -78,7 +84,7 @@ class FeatureSelector(nn.Module):
             return x * stochastic_gate
         x = x.squeeze()
         #k = int(0.05*x.shape[1])
-        k = int(0.05 * stochastic_gate.shape[0])
+        k = self.target_number# int(0.05 * stochastic_gate.shape[0])
         #topk = torch.topk(stochastic_gate, k,sorted = True).indices
         #topk = torch.sort(topk).values
         topk = self.get_topk_stable(stochastic_gate,k)

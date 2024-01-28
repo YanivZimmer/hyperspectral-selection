@@ -3,7 +3,7 @@ import os
 from typing import Callable
 from common_utils.visualizer import Visualizer
 import torch.optim as optim
-
+import traceback
 import numpy as np
 import torch
 from sklearn.model_selection import KFold
@@ -17,7 +17,7 @@ N_BANDS = 204
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 from dog import LDoG
 from dog import PolynomialDecayAverager
-
+import statistics
 class CrossValidator:
     Patience = 5
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
@@ -67,7 +67,7 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                       display_iter=100, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
+                       display_iter=200, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
@@ -168,8 +168,15 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        optimizer = LDoG(net.parameters(), reps_rel=1e-4)#
-        averager = PolynomialDecayAverager(net)
+        #optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
+        averager = None #PolynomialDecayAverager(net)
+        lr=0.002
+        #modified_lr = [
+        #    {"params": list(net.parameters())[1:], "lr": lr},
+        #    {"params": list(net.parameters())[:1], "lr": 4 * lr},
+        #]
+        #optimizer = optim.Adam(modified_lr, lr=lr)
+        optimizer= optim.Adam(net.parameters(), lr=lr)
         #optimizer= optim.Adam(net.parameters(), lr=0.005)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
@@ -216,11 +223,12 @@ class CrossValidator:
                 loss = criterion(output, target)
                 reg = 0
                 try:
-                    reg = net.regularization() if not regu_weird else regu_early_start*net.regularization()
+                    reg = net.regularization()# if not regu_weird else regu_early_start*net.regularization()
                 #TODO -specific error
                 except:
-                    reg = 0
-                loss = loss + 0.025 * reg
+                  traceback.print_exc() 
+                  reg = 0
+                loss = loss + 1 * reg
                 loss.backward()
                 optimizer.step()
                 if averager is not None:
