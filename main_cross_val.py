@@ -336,7 +336,6 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
         all_algo_n_bands_to_selection = {"stg0" : []}
     # run the experiment several times
 
-    bands_amount = [BANDS_AMOUNT]
     train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
     train_gt, val_gt = sample_gt(train_gt, 0.999, mode="random")
     # Generate the dataset

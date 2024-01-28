@@ -476,7 +476,7 @@ for algo_name in all_algo_n_bands_to_selection.keys():
                     pass
                 if hasattr(model, "test"):
                     model.test = True
-
+                #LOOK HERE
                 probabilities = test(model, img, hyperparams)
                 prediction = np.argmax(probabilities, axis=-1)
                 run_results = metrics(

@@ -309,7 +309,7 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
     Returns:
         accuracy, F1 score by class, confusion matrix
     """
-    ignored_mask = np.zeros(target.shape[:2], dtype=bool)
+    ignored_mask = torch.zeros(target.shape[:2], dtype=bool)
     for l in ignored_labels:
         ignored_mask[target == l] = True
     ignored_mask = ~ignored_mask
@@ -321,7 +321,7 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
 
     n_classes = np.max(target) + 1 if n_classes is None else n_classes
 
-    cm = confusion_matrix(target, prediction, labels=range(n_classes))
+    cm = confusion_matrix(target.cpu(), prediction.cpu(), labels=range(n_classes))
 
     results["Confusion matrix"] = cm
 

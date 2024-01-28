@@ -18,6 +18,8 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 from dog import LDoG
 from dog import PolynomialDecayAverager
 import statistics
+from common_utils.utils import metrics
+
 class CrossValidator:
     Patience = 5
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
@@ -32,6 +34,7 @@ class CrossValidator:
         self.save_gates_progression = False
         kfold = KFold(n_splits=self.n_folds, shuffle=True)
         self.folds = list(kfold.split(dataset))
+        self.n_class=17
 
         #self.folds_idx,(self.train_ids,self.test_ids) = self.folds
     def cross_validate(self, model_creator: Callable, num_of_epochs: int,lam,algo_name,batch_size=256):
@@ -111,6 +114,8 @@ class CrossValidator:
 
         # Evaluationfor this fold
         correct, total = 0, 0
+        all_pred = torch.tensor([]).to('cuda')
+        all_target = torch.tensor([]).to('cuda')
         with torch.no_grad():
             # Iterate over the test data and generate predictions
             for i, data in enumerate(testloader, 0):
@@ -119,12 +124,15 @@ class CrossValidator:
                 #
                 # Generate outputs
                 outputs = network(inputs.to(device))
-
+                targets = targets.to(device)
                 # Set total and correct
                 _, predicted = torch.max(outputs.data, 1)
                 total += targets.size(0)
                 #TODO verify warning
                 correct += (predicted == targets.to(device)).sum().item()
+                #For metrics calc (Kappa, f1,etc)
+                all_target = torch.cat([all_target, targets], dim=0)
+                all_pred = torch.cat([all_pred, predicted], dim=0)
 
             # Print accuracy
             print('Accuracy for fold %d: %d %%' % (fold, 100.0 * correct / total))
@@ -134,7 +142,13 @@ class CrossValidator:
                 self.visualizer.write_last_gates(f'{self.dataset_name}_{self.patch_size}',
                                                  gates,gates_prob_one)
             #return results of test
-            return 100.0 * (correct / total), gates, gates_prob_one, gates_positive_prob
+            run_results = metrics(
+                all_pred,
+                all_target,
+                ignored_labels=[],
+                n_classes=self.n_class,
+            )
+            return run_results, gates, gates_prob_one, gates_positive_prob
 
     def get_non_zero_bands(self,model):
         if not hasattr(model, "get_gates"):
@@ -322,3 +336,12 @@ class CrossValidator:
                         total += 1
         return accuracy / total
         #
+    def test_with_metrics(self):
+        probabilities = test(model, img, hyperparams)
+        prediction = np.argmax(probabilities, axis=-1)
+        run_results = metrics(
+            prediction,
+            test_gt,
+            ignored_labels=hyperparams["ignored_labels"],
+            n_classes=N_CLASSES,
+        )
