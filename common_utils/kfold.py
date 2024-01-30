@@ -18,12 +18,13 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 from dog import LDoG
 from dog import PolynomialDecayAverager
 import statistics
-from common_utils.utils import metrics
-
+from common_utils.utils import metrics,metrics_to_average
+from common_utils.results_saver import ResultsSaver
+from typing import List
 class CrossValidator:
     Patience = 5
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
-
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adammamameo",method_name='temp_ehbs')
         self.n_folds = n_folds
         self.display = display
         self.dataset = dataset
@@ -85,24 +86,28 @@ class CrossValidator:
         print('--------------------------------')
         sum = 0.0
         str_base=""
+        temp_accs=[]
         for key, value in results.items():
             print(f'Fold {key}: {value} %')
             str_base += f'Fold {key}: {value}'
             str_base += os.linesep
-            sum += value
+            temp_accs.append(value['Accuracy'])
+            sum += value['Accuracy']
         avg_str = f'Average: {sum / len(results.items())} % '
         print(avg_str)
-        std = statistics.stdev(results.values())
+        std = statistics.stdev(temp_accs)
         std_str = f'Standard deviation: {std}'
         print(std_str)
+        processed_metrics = metrics_to_average(results)
+        self.results_saver.save(processed_metrics)
         str_base += std_str + std_str
         str_base += os.linesep
         print("num_gates_prob_one", num_gates_prob_one)
         str_base += f"num_gates_prob_one {num_gates_prob_one}\n"
         print("num_gates_positive_prob", num_gates_positive_prob)
         str_base += f"num_gates_positive_prob {num_gates_positive_prob}\n"
-        return str_base,gates_idx_all
-
+        #return str_base,gates_idx_all
+        return "",gates_idx_all
 
     def test(self, network, fold, testloader):
         # Print about testing
@@ -149,6 +154,7 @@ class CrossValidator:
                 n_classes=self.n_class,
             )
             return run_results, gates, gates_prob_one, gates_positive_prob
+
 
     def get_non_zero_bands(self,model):
         if not hasattr(model, "get_gates"):

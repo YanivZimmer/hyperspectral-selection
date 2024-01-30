@@ -14,7 +14,7 @@ import torch
 import visdom
 from scipy import io, misc
 from sklearn.metrics import confusion_matrix
-
+from typing import List
 
 def get_device(ordinal):
     # Use GPU ?
@@ -348,7 +348,8 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
     pe = np.sum(np.sum(cm, axis=0) * np.sum(cm, axis=1)) / float(total * total)
     kappa = (pa - pe) / (1 - pe)
     results["Kappa"] = kappa
-
+    acc_per_class=cm.diagonal() / cm.sum(axis=1)
+    results["Acc per class"]=acc_per_class
     return results
 
 
@@ -415,6 +416,34 @@ def show_results(results, vis, label_values=None, agregated=False):
         return accuracies, kappas, F1_scores_mean
     return accuracy, kappa, F1scores
 
+def average_and_std_dev(vectors):
+    vectors_array = np.array(vectors)
+    average_vector = np.mean(vectors_array, axis=0)
+    std_dev_vector = np.std(vectors_array, axis=0)
+    return average_vector, std_dev_vector
+
+def metrics_to_average(k_results: List):
+    first_value = next(iter(k_results.values()))
+    processed_metrics = {}
+    num_arrays = len(k_results)
+    Acc_per_class = np.empty((num_arrays,first_value['Acc per class'].shape[0]))
+    F1_scores = np.empty((num_arrays,first_value['F1 scores'].shape[0]))
+    Acc = np.empty((num_arrays, 1))
+    Kappa = np.empty((num_arrays, 1))
+    for i,results in enumerate(k_results.values()):
+        Acc[i]=results["Accuracy"]
+        Kappa[i]=results["Kappa"]
+        Acc_per_class[i]=results["Acc per class"]
+        F1_scores[i]=results["F1 scores"]
+    processed_metrics["Accuracy avg"],processed_metrics["Accuracy std"] =\
+        average_and_std_dev(Acc)
+    processed_metrics["Acc per class avg"], processed_metrics["Acc per class std"] = \
+        average_and_std_dev(Acc_per_class)
+    processed_metrics["Kappa avg"], processed_metrics["Kappa std"] = \
+        average_and_std_dev(Kappa)
+    processed_metrics["F1 scores avg"], processed_metrics["F1 scores std"] = \
+        average_and_std_dev(Acc_per_class)
+    return processed_metrics
 
 def sample_gt(gt, train_size, mode="random"):
     """Extract a fixed percentage of samples from an array of labels.
