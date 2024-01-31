@@ -24,7 +24,7 @@ from typing import List
 class CrossValidator:
     Patience = 5
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adammamameo",method_name='temp_ehbs')
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adammamaw",method_name='temp_ehbs3')
         self.n_folds = n_folds
         self.display = display
         self.dataset = dataset

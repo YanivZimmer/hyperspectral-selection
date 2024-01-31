@@ -348,9 +348,10 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
     pe = np.sum(np.sum(cm, axis=0) * np.sum(cm, axis=1)) / float(total * total)
     kappa = (pa - pe) / (1 - pe)
     results["Kappa"] = kappa
-    acc_per_class=cm.diagonal() / cm.sum(axis=1)
+    acc_per_class = cm.diagonal() / cm.sum(axis=1)
     results["Acc per class"] = acc_per_class
-    results["Average Accuracy"] = np.mean(acc_per_class)
+    #ignore label 0 (undefined?)
+    results["Average Accuracy"] = np.mean(acc_per_class[1:])
     return results
 
 
@@ -419,8 +420,8 @@ def show_results(results, vis, label_values=None, agregated=False):
 
 def average_and_std_dev(vectors):
     vectors_array = np.array(vectors)
-    average_vector = np.mean(vectors_array, axis=0)
-    std_dev_vector = np.std(vectors_array, axis=0)
+    average_vector = np.nanmean(vectors_array, axis=0)
+    std_dev_vector = np.nanstd(vectors_array, axis=0)
     return average_vector, std_dev_vector
 
 def metrics_to_average(k_results: List):

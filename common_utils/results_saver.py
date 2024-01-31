@@ -27,11 +27,13 @@ class ResultsSaver:
 
     def save(self, di:Dict):
         file_name = f'{self.dataset_name}_{self.optimizer_name}.csv'
-        prev_df = pd.read_csv(file_name) if os.path.exists(file_name) else None
+        header = True
+
         self.split_f1(di)
         self.split_acc(di)
         df = pd.DataFrame({self.method_name:di}).transpose()
-        if prev_df is not None:
-            df = prev_df.append(df)
-        df.to_csv(file_name, mode='w')
+        if os.path.exists(file_name):
+            header=False
+        df.to_csv(file_name, mode='a', header=header)
+
         print(di)
