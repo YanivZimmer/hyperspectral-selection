@@ -2,10 +2,9 @@ import os
 from typing import Dict
 import pandas as pd
 class ResultsSaver:
-    def __init__(self,dataset_name,optimizer_name,method_name):
+    def __init__(self,dataset_name,optimizer_name):
         self.dataset_name = dataset_name
         self.optimizer_name = optimizer_name
-        self.method_name = method_name
 
     def split_per_class(self,di,avg_key,std_key,new_key):
         if avg_key in di.keys():
@@ -25,13 +24,13 @@ class ResultsSaver:
         self.split_per_class(di=di,avg_key=acc_key,std_key=acc_key_std,new_key=new_key)
 
 
-    def save(self, di:Dict):
+    def save(self, di:Dict,method_name:str):
         file_name = f'{self.dataset_name}_{self.optimizer_name}.csv'
         header = True
 
         self.split_f1(di)
         self.split_acc(di)
-        df = pd.DataFrame({self.method_name:di}).transpose()
+        df = pd.DataFrame({method_name:di}).transpose()
         if os.path.exists(file_name):
             header=False
         df.to_csv(file_name, mode='a', header=header)

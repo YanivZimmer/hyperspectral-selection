@@ -24,7 +24,7 @@ from typing import List
 class CrossValidator:
     Patience = 5
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adammamaw",method_name='temp_ehbs3')
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adam")
         self.n_folds = n_folds
         self.display = display
         self.dataset = dataset
@@ -99,7 +99,7 @@ class CrossValidator:
         std_str = f'Standard deviation: {std}'
         print(std_str)
         processed_metrics = metrics_to_average(results)
-        self.results_saver.save(processed_metrics)
+        self.results_saver.save(processed_metrics,algo_name)
         str_base += std_str + std_str
         str_base += os.linesep
         print("num_gates_prob_one", num_gates_prob_one)

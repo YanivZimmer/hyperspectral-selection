@@ -333,7 +333,7 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
     if not use_stg:
         all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
     else:
-        all_algo_n_bands_to_selection = {"stg0" : []}
+        all_algo_n_bands_to_selection = {"ehbs" : []}
     # run the experiment several times
 
     train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
