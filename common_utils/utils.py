@@ -349,7 +349,8 @@ def metrics(prediction, target, ignored_labels=[], n_classes=None):
     kappa = (pa - pe) / (1 - pe)
     results["Kappa"] = kappa
     acc_per_class=cm.diagonal() / cm.sum(axis=1)
-    results["Acc per class"]=acc_per_class
+    results["Acc per class"] = acc_per_class
+    results["Average Accuracy"] = np.mean(acc_per_class)
     return results
 
 
@@ -426,23 +427,27 @@ def metrics_to_average(k_results: List):
     first_value = next(iter(k_results.values()))
     processed_metrics = {}
     num_arrays = len(k_results)
-    Acc_per_class = np.empty((num_arrays,first_value['Acc per class'].shape[0]))
-    F1_scores = np.empty((num_arrays,first_value['F1 scores'].shape[0]))
-    Acc = np.empty((num_arrays, 1))
-    Kappa = np.empty((num_arrays, 1))
+    acc_per_class = np.empty((num_arrays,first_value['Acc per class'].shape[0]))
+    f1_scores = np.empty((num_arrays,first_value['F1 scores'].shape[0]))
+    acc = np.empty((num_arrays, 1))
+    avg_acc = np.empty((num_arrays, 1))
+    kappa = np.empty((num_arrays, 1))
     for i,results in enumerate(k_results.values()):
-        Acc[i]=results["Accuracy"]
-        Kappa[i]=results["Kappa"]
-        Acc_per_class[i]=results["Acc per class"]
-        F1_scores[i]=results["F1 scores"]
-    processed_metrics["Accuracy avg"],processed_metrics["Accuracy std"] =\
-        average_and_std_dev(Acc)
+        acc[i]=results["Accuracy"]
+        kappa[i]=results["Kappa"]
+        acc_per_class[i]=results["Acc per class"]
+        f1_scores[i]=results["F1 scores"]
+        avg_acc[i]=results["Average Accuracy"]
+    processed_metrics["OAccuracy avg"],processed_metrics["OAccuracy std"] =\
+        average_and_std_dev(acc)
+    processed_metrics["AAccuracy avg"],processed_metrics["AAccuracy std"] =\
+        average_and_std_dev(avg_acc)
     processed_metrics["Acc per class avg"], processed_metrics["Acc per class std"] = \
-        average_and_std_dev(Acc_per_class)
+        average_and_std_dev(acc_per_class)
     processed_metrics["Kappa avg"], processed_metrics["Kappa std"] = \
-        average_and_std_dev(Kappa)
+        average_and_std_dev(kappa)
     processed_metrics["F1 scores avg"], processed_metrics["F1 scores std"] = \
-        average_and_std_dev(Acc_per_class)
+        average_and_std_dev(f1_scores)
     return processed_metrics
 
 def sample_gt(gt, train_size, mode="random"):
