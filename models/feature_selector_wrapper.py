@@ -16,11 +16,12 @@ class FeatureSelectionWrapper:
         sigma=0.5,
         lam=1,
         device="cuda:0",
+        target_number=None,
         headstart_idx=None,
     ):
         self.input_channels = input_channels
         self.feature_selector = FeatureSelector(
-            self.input_channels, sigma=sigma, device=device, headstart_idx=headstart_idx
+            self.input_channels, sigma=sigma, device=device, target_number=target_number, headstart_idx=headstart_idx
         )
         self.test = False
         self.k = None

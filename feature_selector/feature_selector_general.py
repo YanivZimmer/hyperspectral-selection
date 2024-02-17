@@ -13,15 +13,15 @@ def create_boolean_tensor(vector, size):
 
 
 class FeatureSelector(nn.Module):
-    def __init__(self, input_dim, sigma, device, headstart_idx=None):
+    def __init__(self, input_dim, sigma, device,target_number , headstart_idx=None):
         super(FeatureSelector, self).__init__()
-        self.target_number = 10
+        self.target_number = target_number
         self.device = device
         self.input_dim = input_dim
         self.headstart_idx_to_tensor(headstart_idx)
         self.headstart_idx=headstart_idx
         self.mu = torch.nn.Parameter(
-            0.01
+            0.00001
             * torch.randn(
                 input_dim,
             ),

@@ -1,5 +1,5 @@
 # Define the K-fold Cross Validator
-import os
+import os,math
 from typing import Callable
 from common_utils.visualizer import Visualizer
 import torch.optim as optim
@@ -35,7 +35,7 @@ class CrossValidator:
         self.save_gates_progression = False
         kfold = KFold(n_splits=self.n_folds, shuffle=True)
         self.folds = list(kfold.split(dataset))
-        self.n_class=17
+        self.n_class=11
 
         #self.folds_idx,(self.train_ids,self.test_ids) = self.folds
     def cross_validate(self, model_creator: Callable, num_of_epochs: int,lam,algo_name,batch_size=256):
@@ -50,13 +50,15 @@ class CrossValidator:
         print('--------------------------------')
 
         # K-fold Cross Validation model evaluation
-        for fold, (train_ids, test_ids) in enumerate(self.folds):
+        #ERROR TODO NOTICE- Im using the big part for test. pervious was: for fold, (train_ids, test_ids) in enumerate(self.folds):
+        for fold, (test_ids, train_ids) in enumerate(self.folds):
             # Print
             print(f'FOLD {fold}')
             print('--------------------------------')
             #if fold%3!=2:
             #    continue
             # Sample elements randomly from a given list of ids, no replacement.
+ 
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
             test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
 
@@ -189,11 +191,14 @@ class CrossValidator:
             supervision (optional): 'full' or 'semi'
         """
         #optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
-        averager = None #PolynomialDecayAverager(net)
-        lr=0.002
+        averager = None# PolynomialDecayAverager(net)
+        #PaviaU 0.002 Salinas 0.001
+        #lr=0.0015##Salinas BM 
+        #lr=0.002 PaviaU old
+        lr = 0.0005 #PaviU 
         #modified_lr = [
         #    {"params": list(net.parameters())[1:], "lr": lr},
-        #    {"params": list(net.parameters())[:1], "lr": 4 * lr},
+        #    {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
         #]
         #optimizer = optim.Adam(modified_lr, lr=lr)
         optimizer= optim.Adam(net.parameters(), lr=lr)
@@ -248,7 +253,8 @@ class CrossValidator:
                 except:
                   traceback.print_exc() 
                   reg = 0
-                loss = loss + 1 * reg
+                l1_regularization = sum(param.abs().sum() for param in net.parameters())
+                loss = loss + 1 * reg 
                 loss.backward()
                 optimizer.step()
                 if averager is not None:

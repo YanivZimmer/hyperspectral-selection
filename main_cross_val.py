@@ -324,22 +324,23 @@ def model_creator_func(**hyperparams):
     return get_model(MODEL, **hyperparams)
 
 
-def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
+def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
     bands_acc_mapping_total = {}
     bands_kappa_mapping_total = {}
     gates_acc_mapping_total = {}
     hyperparams = get_hyperparams()
     results = []
-    if not use_stg:
+    if not use_ehbs:
         all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
     else:
         all_algo_n_bands_to_selection = {"ehbs" : []}
     # run the experiment several times
 
-    train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
-    train_gt, val_gt = sample_gt(train_gt, 0.999, mode="random")
+    #train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
+    train_gt=gt
+    #train_gt, val_gt = sample_gt(train_gt, 0.999, mode="random")
     # Generate the dataset
-    hyperparams["headstart_idx"] = None# if use_stg else n_bands_to_selection[str(n_selected_bands)]
+    hyperparams["headstart_idx"] = None# if use_ehbs else n_bands_to_selection[str(n_selected_bands)]
     hyperparams["lam"] = lam
     #hyperparams["reps_rel"] = reps_rel
     model, optimizer, loss, hyperparams = get_model(MODEL, **hyperparams)
@@ -367,18 +368,18 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
                 )
                 print("Running an experiment with the {} model".format(MODEL))
                 # "run {}/{}".format(run + 1, N_RUNS))
-                display_predictions(
-                    convert_to_color(train_gt), viz, caption="Train ground truth"
-                )
-                display_predictions(
-                    convert_to_color(test_gt), viz, caption="Test ground truth"
-                )
+                #display_predictions(
+                #    convert_to_color(train_gt), viz, caption="Train ground truth"
+                #)
+                #display_predictions(
+                #    convert_to_color(test_gt), viz, caption="Test ground truth"
+                #)
 
                 if CLASS_BALANCING:
                     weights = compute_imf_weights(train_gt, N_CLASSES, IGNORED_LABELS)
                     hyperparams["weights"] = torch.from_numpy(weights)
                 # set headstart idx if not using stg and just testing other
-                hyperparams["headstart_idx"] = None if use_stg else n_bands_to_selection[str(n_selected_bands)]
+                hyperparams["headstart_idx"] = None if use_ehbs else n_bands_to_selection[str(n_selected_bands)]
                 hyperparams["lam"] = lam
                 # Neural network
                 model, _, loss, hyperparams = get_model(MODEL, **hyperparams)
@@ -387,12 +388,13 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
                 # Set number of selected features
                 #if hasattr(model, "k"):
                 #    model.k = n_selected_bands
+                hyperparams["bands_amount"] = BANDS_AMOUNT
                 kfold_res,gates_idx_all=cross_validator.cross_validate(lambda: model_creator_func(**hyperparams),
                                                num_of_epochs=EPOCH,
                                                lam=lam,algo_name=algo,batch_size=batch_size)
                 #gates,n0_gates,n1_gates = get_non_zero_bands(model)
                 algo_kfold[algo] = kfold_res
-                if use_stg:
+                if use_ehbs:
                     gates_idx_mapping[algo] = gates_idx_all
             algo_n_bands_acc[n_selected_bands] = algo_kfold
     print(algo_n_bands_acc,gates_idx_mapping)
@@ -400,7 +402,7 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
 
 
 if __name__ == '__main__':
-    train_test(lam=LAM, use_stg=True, n_folds=5, batch_size=256, save_net=False)
+    train_test(lam=LAM, use_ehbs=True, n_folds=5, batch_size=256, save_net=False)
     #x = 2
     #y = 5
     # x=5
@@ -409,14 +411,14 @@ if __name__ == '__main__':
     # temp = {}
     # for lam in np.arange(x, y + step, step):
     #     print("lam", lam)
-    #     temp[lam] = train_test(lam=lam, use_stg=True, n_folds=5, batch_size=256, save_net=False)
+    #     temp[lam] = train_test(lam=lam, use_ehbs=True, n_folds=5, batch_size=256, save_net=False)
     #x=0.5
     #y=2
     #step = 0.25
     #temp = {}
     #for lam in np.arange(x, y + step, step):
     #    print("lam", lam)
-    #    temp[lam] = train_test(lam=lam, use_stg=True, n_folds=5, batch_size=256, save_net=False)
+    #    temp[lam] = train_test(lam=lam, use_ehbs=True, n_folds=5, batch_size=256, save_net=False)
     #print("done")
     #print(temp)
 #hamida

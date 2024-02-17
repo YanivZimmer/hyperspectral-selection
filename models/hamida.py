@@ -122,6 +122,7 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
             sigma=sigma,
             lam=lam,
             device=device,
+            target_number=target_number,
             headstart_idx=headstart_idx,
         )
 

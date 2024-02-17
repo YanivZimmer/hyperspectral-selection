@@ -87,9 +87,12 @@ def get_model(name, **kwargs):
             n_bands,
             n_classes,
             lam=kwargs["lam"],
+            sigma=0.2,
             patch_size=patch_size,
             headstart_idx=kwargs["headstart_idx"],
-            device=kwargs["device"]
+            device=kwargs["device"],
+            target_number=kwargs["bands_amount"]
+
         )
         lr = kwargs.setdefault("learning_rate", 0.01)
         # different learning rates ls
