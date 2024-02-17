@@ -97,6 +97,19 @@ class FeatureSelector(nn.Module):
     def hard_sigmoid(self, x):
         return torch.clamp(x + 0.5, 0.0, 1.0)
 
+    def reset_gates(self):
+        self.mu = torch.nn.Parameter(
+            0.01
+            * torch.randn(
+                self.input_dim,
+                device=self.device
+            ),
+            requires_grad=True
+        )
+        self.noise = torch.randn(self.mu.size(),device="cuda")
+        #self.mu = self.mu.to(self.device)
+        #self.noise = self.noise.to(self.device)
+
 
     def regularizer(self, x):
         # if self.const_masking is not None:

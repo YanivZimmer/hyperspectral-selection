@@ -203,11 +203,12 @@ parser.add_argument(
     help="Download the specified datasets and quits.",
 )
 
+parser.add_argument("--reset_gates", type=int, default=-1, help="On what epoch to reset the gates")
 
 args = parser.parse_args()
 
 CUDA_DEVICE = get_device(args.cuda)
-
+RESET_GATES = args.reset_gates
 # % of training samples
 SAMPLE_PERCENTAGE = args.training_sample
 # Data augmentation ?
@@ -350,7 +351,7 @@ def train_test(lam, use_stg = True,batch_size=512, n_folds=6,save_net = False):
                                    shuffle=True, num_workers=8)
     # CROSS VALIDATOR KFOLD
     cross_validator = CrossValidator(display=viz, dataset=train_dataset,
-                                     dataset_name=DATASET, n_folds=n_folds,patch_size=PATCH_SIZE)
+                                     dataset_name=DATASET, n_folds=n_folds,patch_size=PATCH_SIZE,reset_gates=RESET_GATES,n_class=N_CLASSES)
     gates_idx_mapping = {}
     algo_n_bands_acc = {}
     bands_amount = [BANDS_AMOUNT]

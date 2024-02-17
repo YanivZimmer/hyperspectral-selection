@@ -320,7 +320,7 @@ def model_creator_func(**hyperparams):
     return get_model(MODEL, **hyperparams)
 
 
-def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
+def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False,dataset_name="S"):
     bands_acc_mapping_total = {}
     bands_kappa_mapping_total = {}
     gates_acc_mapping_total = {}
@@ -385,7 +385,8 @@ def train_test(lam, lr,lr_factor,reps_rel,use_stg = True, save_net = False):
                                                    # pin_memory=hyperparams['device'],
                                                    shuffle=True)
                     #CROSS VALIDATOR KFOLD
-                    cross_validator = CrossValidator(display=viz,k_folds=5)
+                    #    def __init__(self, display, dataset, dataset_name, n_folds, patch_size,method_name):
+                    cross_validator = CrossValidator(display=viz,k_folds=5,method_name=algo,dataset_name=dataset_name)
                     cross_validator.cross_validate(lambda: model_creator_func(**hyperparams), train_dataset,
                                                    num_of_epochs=125)
                     gates,n0_gates,n1_gates = get_non_zero_bands(model)

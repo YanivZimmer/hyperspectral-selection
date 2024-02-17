@@ -27,8 +27,14 @@ class FeatureSelectionWrapper:
         self.reg = self.feature_selector.regularizer
         self.sigma = sigma
         self.lam = lam
+        self.device = device
+        self.headstart_idx = headstart_idx
         self.mu = self.feature_selector.mu
 
+    def reset_gates(self):
+        self.feature_selector = FeatureSelector(
+            self.input_channels, sigma=self.sigma, device=device, headstart_idx=headstart_idx
+        )
     def forward(self, x):
         if self.test and self.feature_selector.mask is None:
             self.feature_selector.set_mask(self.get_top_k_gates(self.k))

@@ -21,9 +21,10 @@ import statistics
 from common_utils.utils import metrics,metrics_to_average
 from common_utils.results_saver import ResultsSaver
 from typing import List
+import math
 class CrossValidator:
     Patience = 5
-    def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
+    def __init__(self, display, dataset, dataset_name, n_folds, patch_size,reset_gates,n_class=17):
         self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adam")
         self.n_folds = n_folds
         self.display = display
@@ -35,7 +36,8 @@ class CrossValidator:
         self.save_gates_progression = False
         kfold = KFold(n_splits=self.n_folds, shuffle=True)
         self.folds = list(kfold.split(dataset))
-        self.n_class=17
+        self.n_class=n_class
+        self.reset_gates = reset_gates
 
         #self.folds_idx,(self.train_ids,self.test_ids) = self.folds
     def cross_validate(self, model_creator: Callable, num_of_epochs: int,lam,algo_name,batch_size=256):
@@ -191,12 +193,12 @@ class CrossValidator:
         #optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
         averager = None #PolynomialDecayAverager(net)
         lr=0.002
-        #modified_lr = [
-        #    {"params": list(net.parameters())[1:], "lr": lr},
-        #    {"params": list(net.parameters())[:1], "lr": 4 * lr},
-        #]
-        #optimizer = optim.Adam(modified_lr, lr=lr)
-        optimizer= optim.Adam(net.parameters(), lr=lr)
+        modified_lr = [
+           {"params": list(net.parameters())[1:], "lr": lr},
+           {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
+        ]
+        optimizer = optim.Adam(modified_lr, lr=lr)
+        #optimizer= optim.Adam(net.parameters(), lr=lr)
         #optimizer= optim.Adam(net.parameters(), lr=0.005)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
@@ -219,6 +221,8 @@ class CrossValidator:
         train_accuracies = []
 
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
+            if e == self.reset_gates:
+                net.feature_selector.reset_gates()
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
                 print("Discount factor=", regu_early_start)
