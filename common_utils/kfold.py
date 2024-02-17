@@ -222,7 +222,12 @@ class CrossValidator:
 
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
             if e == self.reset_gates:
-                net.feature_selector.reset_gates()
+                net.reset_gates()
+                modified_lr = [
+                    {"params": list(net.parameters())[1:], "lr": lr},
+                    {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
+                ]
+                optimizer = optim.Adam(modified_lr, lr=lr)
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
                 print("Discount factor=", regu_early_start)

@@ -33,8 +33,9 @@ class FeatureSelectionWrapper:
 
     def reset_gates(self):
         self.feature_selector = FeatureSelector(
-            self.input_channels, sigma=self.sigma, device=device, headstart_idx=headstart_idx
+            self.input_channels, sigma=self.sigma, device=self.device, headstart_idx=self.headstart_idx
         )
+        self.mu = self.feature_selector.mu
     def forward(self, x):
         if self.test and self.feature_selector.mask is None:
             self.feature_selector.set_mask(self.get_top_k_gates(self.k))

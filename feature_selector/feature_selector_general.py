@@ -24,10 +24,12 @@ class FeatureSelector(nn.Module):
             0.01
             * torch.randn(
                 input_dim,
+                device=self.device
             ),
             requires_grad=True,
         ) if (self.mask is None) else None
-        self.noise = torch.randn(self.mu.size()) if (self.mask is None) else torch.randn(input_dim)
+        self.noise = torch.randn(self.mu.size(),device=self.device) if (self.mask is None) else torch.randn(input_dim,device=self.device)
+        #self.noise = self.noise.to(self.device)
         self.sigma = sigma
         # if PREDEFINED_MASK is not None:
         #    self.const_masking = create_boolean_tensor(PREDEFINED_MASK, input_dim)
@@ -98,7 +100,7 @@ class FeatureSelector(nn.Module):
         return torch.clamp(x + 0.5, 0.0, 1.0)
 
     def reset_gates(self):
-        self.mu = torch.nn.Parameter(
+        self.mu =torch.nn.Parameter(
             0.01
             * torch.randn(
                 self.input_dim,
