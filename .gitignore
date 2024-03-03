@@ -169,3 +169,5 @@ Salinas/
 Salinas1/
 Salinas2/
 .idea
+*.csv
+*json*

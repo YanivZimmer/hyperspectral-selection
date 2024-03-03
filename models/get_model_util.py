@@ -87,20 +87,20 @@ def get_model(name, **kwargs):
             n_bands,
             n_classes,
             lam=kwargs["lam"],
-            sigma=0.2,
+            #sigma=0.2,
+            #sigma=0.3,
+            sigma=0.5,
             patch_size=patch_size,
             headstart_idx=kwargs["headstart_idx"],
             device=kwargs["device"],
             target_number=kwargs["bands_amount"]
-
         )
         lr = kwargs.setdefault("learning_rate", 0.01)
         # different learning rates ls
-
         #modified_lr = [
         #    {"params": list(model.parameters())[1:], "lr": lr},
         #   {"params": list(model.parameters())[:1], "lr": kwargs["lr_factor"] * lr},
-        #]
+        #]8
         #optimizer = optim.SGD(model.parameters(), lr=lr)#, weight_decay=0.0005)
         optimizer = optim.Adam(model.parameters(), lr=0.0001)#, weight_decay=0.0005)
         #optimizer = optim.SGD(modified_lr, lr=lr, weight_decay=0.0005)

@@ -23,12 +23,24 @@ class FeatureSelectionWrapper:
         self.feature_selector = FeatureSelector(
             self.input_channels, sigma=sigma, device=device, target_number=target_number, headstart_idx=headstart_idx
         )
+        self.target_number = target_number
         self.test = False
         self.k = None
         self.reg = self.feature_selector.regularizer
         self.sigma = sigma
         self.lam = lam
+        self.device = device
+        self.headstart_idx = headstart_idx
+
         self.mu = self.feature_selector.mu
+
+    def reset_gates(self):
+        print("The device is ", self.device)
+        self.feature_selector = FeatureSelector(
+            self.input_channels, sigma=self.sigma, device=self.device, target_number=self.target_number, headstart_idx=None#self.headstart_idx
+        )
+        self.mu = self.feature_selector.mu
+
 
     def forward(self, x):
         if self.test and self.feature_selector.mask is None:

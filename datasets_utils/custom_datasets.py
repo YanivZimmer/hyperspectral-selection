@@ -13,8 +13,11 @@ CUSTOM_DATASETS_CONFIG = {
 
 
 def dfc2018_loader(folder):
-    img = open_file(folder + "2018_IEEE_GRSS_DFC_HSI_TR.HDR")[:, :, :-2]
-    gt = open_file(folder + "2018_IEEE_GRSS_DFC_GT_TR.tif")
+    folder = '/dsi/scratch/home/dsi/yanivz_datasets/2018IEEE_Contest/Phase2/'
+    #img = open_file(folder + "2018_IEEE_GRSS_DFC_HSI_TR.hdr")[:, :, :-2]
+    img = open_file(folder + "FullHSIDataset/20170218_UH_CASI_S4_NAD83.hdr")[:, :, :-2]
+
+    gt = open_file(folder + "TrainingGT/2018_IEEE_GRSS_DFC_GT_TR.tif")
     gt = gt.astype("uint8")
     # The original data img size(601, 2384, 50) gt size(1202, 4768)
     # So you first need to downsample the img data or upsample the gt data

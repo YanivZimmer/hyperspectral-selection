@@ -22,9 +22,10 @@ from common_utils.utils import metrics,metrics_to_average
 from common_utils.results_saver import ResultsSaver
 from typing import List
 class CrossValidator:
-    Patience = 5
-    def __init__(self, display, dataset, dataset_name, n_folds, patch_size):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name="Adam")
+    Patience = 250
+    def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"night_sess_{target_bands}")
+
         self.n_folds = n_folds
         self.display = display
         self.dataset = dataset
@@ -35,7 +36,8 @@ class CrossValidator:
         self.save_gates_progression = False
         kfold = KFold(n_splits=self.n_folds, shuffle=True)
         self.folds = list(kfold.split(dataset))
-        self.n_class=11
+        self.n_class = n_class
+        self.reset_gates = reset_gates
 
         #self.folds_idx,(self.train_ids,self.test_ids) = self.folds
     def cross_validate(self, model_creator: Callable, num_of_epochs: int,lam,algo_name,batch_size=256):
@@ -48,17 +50,17 @@ class CrossValidator:
         gates_idx_all = {}
         # Start print
         print('--------------------------------')
-
         # K-fold Cross Validation model evaluation
         #ERROR TODO NOTICE- Im using the big part for test. pervious was: for fold, (train_ids, test_ids) in enumerate(self.folds):
-        for fold, (test_ids, train_ids) in enumerate(self.folds):
+        for fold, (train_ids, test_ids) in enumerate(self.folds):
+        #for fold, (test_ids, train_ids) in enumerate(self.folds):
             # Print
             print(f'FOLD {fold}')
             print('--------------------------------')
             #if fold%3!=2:
             #    continue
             # Sample elements randomly from a given list of ids, no replacement.
- 
+
             train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
             test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
 
@@ -73,16 +75,17 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                       display_iter=200, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
+                           display_iter=200, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
-            print(results[fold], gates_idx[fold])    
+            print(results[fold], gates_idx[fold])
             gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
             #TODO- this should not stay, just a temp for running only one fold
             #break
+
         print("gates_idx_all", gates_idx_all)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.n_folds} FOLDS')
         print('--------------------------------')
@@ -97,7 +100,7 @@ class CrossValidator:
             sum += value['Accuracy']
         avg_str = f'Average: {sum / len(results.items())} % '
         print(avg_str)
-        std = statistics.stdev(temp_accs)
+        std = statistics.stdev(temp_accs) if len(temp_accs)>1 else 0
         std_str = f'Standard deviation: {std}'
         print(std_str)
         processed_metrics = metrics_to_average(results)
@@ -121,8 +124,8 @@ class CrossValidator:
 
         # Evaluationfor this fold
         correct, total = 0, 0
-        all_pred = torch.tensor([]).to('cuda')
-        all_target = torch.tensor([]).to('cuda')
+        all_pred = torch.tensor([]).to(device)
+        all_target = torch.tensor([]).to(device)
         with torch.no_grad():
             # Iterate over the test data and generate predictions
             for i, data in enumerate(testloader, 0):
@@ -169,6 +172,7 @@ class CrossValidator:
     def train(self, net, optimizer, criterion, data_loader, epoch,
               fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
               val_loader=None,algo_name=None, supervision='full',):
+        print("lam=",lam)
         regu_early_start = 1
         regu_early_step = 0
         regu_weird=False
@@ -190,19 +194,26 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        #optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
-        averager = None# PolynomialDecayAverager(net)
+        optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
+        averager = None #PolynomialDecayAverager(net)
+        lr = 0.0005
+        optimizer = optim.Adam(net.parameters(), lr=lr)
+        #lr = 0.002
+        # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
+        # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
+        # optimizer_only_fs= LDoG(net.feature_selector.parameters())
+        # averager_only_fs = PolynomialDecayAverager(net.feature_selector)
         #PaviaU 0.002 Salinas 0.001
         #lr=0.0015##Salinas BM 
         #lr=0.002 PaviaU old
-        lr = 0.0005 #PaviU 
+        #210224 lr = 0.0005 #PaviU
+        #lr = 0.00025
         #modified_lr = [
         #    {"params": list(net.parameters())[1:], "lr": lr},
         #    {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
         #]
         #optimizer = optim.Adam(modified_lr, lr=lr)
-        optimizer= optim.Adam(net.parameters(), lr=lr)
-        #optimizer= optim.Adam(net.parameters(), lr=0.005)
+
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -224,6 +235,29 @@ class CrossValidator:
         train_accuracies = []
 
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
+            #print(optimizer)
+            #print(averager)
+            if e == self.reset_gates:
+                net.reset_gates()#
+                # modified_lr = [
+                #    {"params": list(net.parameters())[1:], "reps_rel":0.01},
+                #    {"params": list(net.parameters())[:1], "reps_rel":1e-10 },
+                # ]
+                # modified_lr = [
+                #    {"params": list(net.parameters())[1:], "lr": 0},
+                #    {"params": list(net.parameters())[:1], "lr": -math.log2(lr) * 2 * lr},
+                # ]
+                # optimizer = LDoG(net.parameters())  # , reps_rel=1e-6)#
+                #for param in list(net.parameters()[1:]):
+                #    param.grad = None
+                #optimizer = LDoG([{"params": list(net.feature_selector.parameters())}], reps_rel=1e-4)
+                optimizer  = optim.SGD([{"params": list(net.feature_selector.parameters())}],lr=0.01)
+                averager = None#PolynomialDecayAverager(net.feature_selector)
+                #modified_lr = [
+                #   {"params": list(net.parameters())[1:], "lr": lr},
+                #   {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
+                #]
+                #optimizer = optim.Adam(modified_lr, lr=lr)
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
                 print("Discount factor=", regu_early_start)
@@ -231,6 +265,7 @@ class CrossValidator:
             net.train()
             avg_loss = 0.
             print(net.feature_selector.get_gates('prob'))
+            print(net.feature_selector.get_gates('raw'))
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
                 if self.save_gates_progression and hasattr(net, "feature_selector"):
@@ -245,7 +280,6 @@ class CrossValidator:
                 reg = 0
                 output = net(data)
                 # target = target - 1
-                loss = criterion(output, target)
                 reg = 0
                 try:
                     reg = net.regularization()# if not regu_weird else regu_early_start*net.regularization()
@@ -253,12 +287,31 @@ class CrossValidator:
                 except:
                   traceback.print_exc() 
                   reg = 0
-                l1_regularization = sum(param.abs().sum() for param in net.parameters())
-                loss = loss + 1 * reg 
+                loss = criterion(output, target) + lam * reg
+                #print("loss_with_reg0",loss_with_reg)
+                #loss = criterion(output, target)
+                #loss = loss + lam * reg
+                #print("loss1",loss)
+                # loss = criterion(output, target)
+                # # #print("loss2",loss)
+                # if e%1==0:
+                #     optimizer_only_model.zero_grad()
+                #     loss.backward()
+                #     optimizer_only_model.step()
+                #     #averager_only_model.step()
+                # if e%1==0:
+                #     #loss_with_reg = criterion(output, target) + lam * reg
+                #     #print("loss_with_reg1", loss_with_reg)
+                #     optimizer_only_fs.zero_grad()
+                #     loss_with_reg.backward()
+                #     optimizer_only_fs.step()
+                #     averager_only_fs.step()
+                # optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 if averager is not None:
                     averager.step()
+
                 avg_loss += loss.item()
                 losses[iter_] = loss.item()
                 mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_ + 1])

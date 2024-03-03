@@ -35,7 +35,7 @@ import visdom
 from torchsummary import summary
 
 from common_utils.kfold import CrossValidator
-from datasets_utils.datasets import DATASETS_CONFIG, HyperX, get_dataset, open_file
+from datasets_utils.datasets import get_dataset_config, HyperX, get_dataset, open_file
 from train_test.models_train_test import save_model, test, train
 from models.get_model_util import get_model
 from common_utils.utils import (build_dataset, compute_imf_weights, convert_from_color_,
@@ -43,8 +43,9 @@ from common_utils.utils import (build_dataset, compute_imf_weights, convert_from
                                 explore_spectrums, get_device, metrics, plot_spectrums,
                                 sample_gt, show_results)
 
+my_config = get_dataset_config()
 dataset_names = [
-    v["name"] if "name" in v.keys() else k for k, v in DATASETS_CONFIG.items()
+    v["name"] if "name" in v.keys() else k for k, v in my_config.items()
 ]
 
 # Argument parser for CLI interaction
@@ -52,10 +53,10 @@ parser = argparse.ArgumentParser(
     description="Run deep learning experiments on" " various hyperspectral datasets"
 )
 parser.add_argument(
-    "--dataset", type=str, default=True, choices=dataset_names, help="To use stg"
+    "--dataset", type=str, default=True, choices=dataset_names, help="Dataset to use"
 )
 parser.add_argument(
-    "--stg", type=str, default=True, help="Dataset to use."
+    "--stg", type=str, default=True, help="stg to use."
 )
 parser.add_argument(
     "--model",
@@ -202,11 +203,12 @@ parser.add_argument(
     choices=dataset_names,
     help="Download the specified datasets and quits.",
 )
-
+parser.add_argument("--reset_gates", type=int, default=-1, help="On what epoch to reset the gates")
 
 args = parser.parse_args()
 
 CUDA_DEVICE = get_device(args.cuda)
+RESET_GATES = args.reset_gates
 
 # % of training samples
 SAMPLE_PERCENTAGE = args.training_sample
@@ -248,6 +250,7 @@ TRAIN_GT = args.train_set
 TEST_GT = args.test_set
 TEST_STRIDE = args.test_stride
 BANDS_AMOUNT = args.bands_amount
+BATCH_SIZE = args.batch_size
 
 if args.download is not None and len(args.download) > 0:
     for dataset in args.download:
@@ -260,9 +263,11 @@ if not viz.check_connection:
 
 
 def read_dict(filename):
+    print(filename)
     with open(filename) as f:
         data = f.read()
     print("Data type before reconstruction : ", type(data))
+    print(data)
     # reconstructing the data as a dictionary
     js = json.loads(data)
     return js
@@ -351,7 +356,7 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
                                    shuffle=True, num_workers=8)
     # CROSS VALIDATOR KFOLD
     cross_validator = CrossValidator(display=viz, dataset=train_dataset,
-                                     dataset_name=DATASET, n_folds=n_folds,patch_size=PATCH_SIZE)
+                                     dataset_name=DATASET, n_folds=n_folds,patch_size=PATCH_SIZE,n_class=N_CLASSES,reset_gates=RESET_GATES,target_bands=BANDS_AMOUNT)
     gates_idx_mapping = {}
     algo_n_bands_acc = {}
     bands_amount = [BANDS_AMOUNT]
@@ -394,15 +399,16 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
                                                lam=lam,algo_name=algo,batch_size=batch_size)
                 #gates,n0_gates,n1_gates = get_non_zero_bands(model)
                 algo_kfold[algo] = kfold_res
-                if use_ehbs:
-                    gates_idx_mapping[algo] = gates_idx_all
+                #if use_ehbs or RESET_GATES>0:
+                gates_idx_mapping[algo] = gates_idx_all
             algo_n_bands_acc[n_selected_bands] = algo_kfold
     print(algo_n_bands_acc,gates_idx_mapping)
     return algo_n_bands_acc,gates_idx_mapping
 
 
 if __name__ == '__main__':
-    train_test(lam=LAM, use_ehbs=True, n_folds=5, batch_size=256, save_net=False)
+    train_test(lam=LAM, use_ehbs=False, n_folds=5
+               ,batch_size=BATCH_SIZE, save_net=False)
     #x = 2
     #y = 5
     # x=5
@@ -412,7 +418,7 @@ if __name__ == '__main__':
     # for lam in np.arange(x, y + step, step):
     #     print("lam", lam)
     #     temp[lam] = train_test(lam=lam, use_ehbs=True, n_folds=5, batch_size=256, save_net=False)
-    #x=0.5
+    # x=0.5
     #y=2
     #step = 0.25
     #temp = {}

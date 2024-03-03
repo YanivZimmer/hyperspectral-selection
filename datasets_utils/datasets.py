@@ -11,6 +11,8 @@ import torch.utils
 import torch.utils.data
 from sklearn import preprocessing
 from tqdm import tqdm
+import scipy.io as sio
+import mat73
 
 try:
     # Python 3
@@ -18,10 +20,16 @@ try:
 except ImportError:
     # Python 2
     from urllib import urlretrieve
-
+##? circular??
 from common_utils.utils import open_file
+from datasets_utils.custom_datasets import CUSTOM_DATASETS_CONFIG
 
-DATASETS_CONFIG = {
+DATASETS_CONFIG1 = {
+    "Chikusei":{
+        "download": False,
+        "img":"HyperspecVNIR_Chikusei_20140729.mat",
+        "gt":"HyperspecVNIR_Chikusei_20140729_Ground_Truth.mat"
+    },
     "PaviaC": {
         "urls": [
             "http://www.ehu.eus/ccwintco/uploads/e/e3/Pavia.mat",
@@ -73,12 +81,23 @@ DATASETS_CONFIG = {
 }
 
 try:
-    from custom_datasets import CUSTOM_DATASETS_CONFIG
-
-    DATASETS_CONFIG.update(CUSTOM_DATASETS_CONFIG)
+    from datasets_utils.custom_datasets import CUSTOM_DATASETS_CONFIG
+    DATASETS_CONFIG1.update(CUSTOM_DATASETS_CONFIG)
 except ImportError:
+    print("erorrrrr")
     pass
+DATASETS_CONFIG=DATASETS_CONFIG1
 
+def get_dataset_config():
+    try:
+        from datasets_utils.custom_datasets import CUSTOM_DATASETS_CONFIG
+
+        DATASETS_CONFIG.update(CUSTOM_DATASETS_CONFIG)
+        return DATASETS_CONFIG
+    except ImportError:
+        print("Error in dataset config")
+        return DATASETS_CONFIG
+        pass
 
 class TqdmUpTo(tqdm):
     """Provides `update_to(n)` which uses `tqdm.update(delta_n)`."""
@@ -111,7 +130,7 @@ def get_dataset(dataset_name, target_folder="./", datasets=DATASETS_CONFIG):
         rgb_bands: int tuple that correspond to red, green and blue bands
     """
     palette = None
-
+    datasets = get_dataset_config()
     if dataset_name not in datasets.keys():
         raise ValueError("{} dataset is unknown.".format(dataset_name))
 
@@ -136,7 +155,45 @@ def get_dataset(dataset_name, target_folder="./", datasets=DATASETS_CONFIG):
     elif not os.path.isdir(folder):
         print("WARNING: {} is not downloadable.".format(dataset_name))
 
-    if dataset_name == "PaviaC":
+    if dataset_name == "Chikusei":
+        # Load the image
+        img_path = "/dsi/scratch/home/dsi/yanivz_datasets/Chikusei/Chikusei_MATLAB/HyperspecVNIR_Chikusei_20140729.mat"
+        gt_path = "/dsi/scratch/home/dsi/yanivz_datasets/Chikusei/Chikusei_MATLAB/HyperspecVNIR_Chikusei_20140729_Ground_Truth.mat"
+        img_mat = mat73.loadmat(img_path)
+        gt_mat = sio.loadmat(gt_path)
+        img_keys = img_mat.keys()
+        gt_keys = gt_mat.keys()
+        img_key = [k for k in img_keys if k != '__version__' and k != '__header__' and k != '__globals__']
+        gt_key = [k for k in gt_keys if k != '__version__' and k != '__header__' and k != '__globals__']
+        img= img_mat.get(img_key[0]).astype('float64')
+        gt = gt_mat.get(gt_key[0])[0][0][0].astype('int8')
+        rgb_bands = (55, 41, 12)
+        label_values = [
+            "Undefined",
+            'Water',
+            'Bare soil (school)',
+            'Bare soil (park)',
+            'Bare soil (farmland)',
+            'Natural plants',
+            'Weeds in farmland',
+            'Forest',
+           'Rice field (grown)',
+           'Rice field (first stage)',
+           'Row crops',
+           'Plastic house',
+           'Manmade (non-dark)',
+           'Manmade (dark)',
+           'Manmade (blue)',
+           'Manmade (red)',
+           'Manmade grass',
+           'Asphalt',
+           'Paved ground',
+            'Extra'
+        ]
+
+        ignored_labels = [0]
+
+    elif dataset_name == "PaviaC":
         # Load the image
         img = open_file(folder + "Pavia.mat")["pavia"]
 

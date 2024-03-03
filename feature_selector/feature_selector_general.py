@@ -18,17 +18,21 @@ class FeatureSelector(nn.Module):
         self.target_number = target_number
         self.device = device
         self.input_dim = input_dim
-        self.headstart_idx_to_tensor(headstart_idx)
-        self.headstart_idx=headstart_idx
-        self.mu = torch.nn.Parameter(
-            0.00001
-            * torch.randn(
-                input_dim,
-            ),
-            requires_grad=True,
-        ) if (self.mask is None) else None
-        self.noise = torch.randn(self.mu.size()) if (self.mask is None) else torch.randn(input_dim)
+        self.mask = None
+        self.headstart_idx = sorted(headstart_idx) if headstart_idx is not None else None
         self.sigma = sigma
+        const_mask = True
+        if not self.headstart_idx_to_tensor(self.headstart_idx,const_mask=const_mask):
+            self.mu = torch.nn.Parameter(
+                0.01
+                * torch.randn(
+                    input_dim,
+                    device=self.device
+                ),
+                requires_grad=True,
+            ) if (self.mask is None) else None
+            self.noise = torch.randn(self.mu.size(),device=self.device) if\
+                (self.mask is None) else torch.randn(input_dim,device=self.device)
         # if PREDEFINED_MASK is not None:
         #    self.const_masking = create_boolean_tensor(PREDEFINED_MASK, input_dim)
 
@@ -57,9 +61,15 @@ class FeatureSelector(nn.Module):
 
         # Find the indices where the values are greater than the k-th value
         above_k_indices = torch.nonzero(input_tensor >= kth_value).squeeze()
-
+        
+        shuf= torch.randperm(above_k_indices.size(0))
+        #print(shuf)
+        above_k_indices = above_k_indices[shuf]
         # Get the first k indices
         first_k_above_k_indices = above_k_indices[:k]
+        # Get the last k indices
+        #first_k_above_k_indices = above_k_indices[-k:]
+        #print(k,len(above_k_indices),len(above_k_indices[-k:]))
         first_k_above_k_indices = torch.sort(first_k_above_k_indices).values
         return first_k_above_k_indices
 
@@ -88,7 +98,13 @@ class FeatureSelector(nn.Module):
         #topk = torch.topk(stochastic_gate, k,sorted = True).indices
         #topk = torch.sort(topk).values
         topk = self.get_topk_stable(stochastic_gate,k)
+        #print(x.shape,'a')
         x = x[:, topk]
+        #print(x.shape,'b')
+        if len(x.shape)<4:
+           print(topk)
+           print(x.shape)
+           print(x)
         x = torch.transpose(x, 1, 3)
         x = x * stochastic_gate[topk]
         x = torch.transpose(x, 1, 3)
@@ -127,22 +143,30 @@ class FeatureSelector(nn.Module):
     def headstart_idx_to_tensor(self, headstart_idx, const_mask=True):
         if headstart_idx is None:
             self.mask = None
-            return
+            return False
         print(sorted(headstart_idx))
         headstart_mask = torch.zeros(self.input_dim).to(self.device)
         self.headstart_idx = sorted(headstart_idx)
         shifted_vector = np.array(headstart_idx) #- 1
         headstart_mask[shifted_vector] = 1
+        print("headstart_mask",headstart_mask)
         if const_mask:
             self.mask = headstart_mask
-            return
+            return False
         self.mu = torch.nn.Parameter(
             0.01
             * (
                 torch.randn(
                     self.input_dim,
+                    device=self.device
                 )
-            )
-            + 0.05 * headstart_mask,
-            requires_grad=True,
+            )+0.25*headstart_mask,
+            requires_grad=True
         )
+        print(self.mu)
+        #self.mu +=0.5 * headstart_mask
+        #print(self.mu)
+        self.noise = torch.randn(self.input_dim,device=self.device)
+        self.headstart_idx= None
+        self.mask=None
+        return True
