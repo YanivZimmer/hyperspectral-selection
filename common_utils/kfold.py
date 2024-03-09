@@ -24,7 +24,7 @@ from typing import List
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"night_sess_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"sub_regu_{target_bands}")
 
         self.n_folds = n_folds
         self.display = display
@@ -61,10 +61,13 @@ class CrossValidator:
             #    continue
             # Sample elements randomly from a given list of ids, no replacement.
 
-            train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
-            test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
+            # train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
+            # test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
 
-            # Define data loaders for training and testing data in this fold
+            train_subsampler = torch.utils.data.SequentialSampler(train_ids)
+            test_subsampler = torch.utils.data.SequentialSampler(test_ids)
+
+        # Define data loaders for training and testing data in this fold
             trainloader = torch.utils.data.DataLoader(
                 self.dataset,
                 batch_size=batch_size, sampler=train_subsampler)
@@ -75,7 +78,7 @@ class CrossValidator:
 
             #train
             self.train(network, optimizer, loss_function, trainloader, num_of_epochs,fold=fold,lam=lam,
-                           display_iter=200, device=device, display=self.display,val_loader=testloader,algo_name=algo_name)
+                           display_iter=200, device=device, display=self.display,val_loader=None,algo_name=algo_name)
             #test
             #to hard choose best k: network.test = True
             (results[fold], gates_idx[fold],
@@ -196,8 +199,9 @@ class CrossValidator:
         """
         optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
         averager = None #PolynomialDecayAverager(net)
-        lr = 0.0005
-        optimizer = optim.Adam(net.parameters(), lr=lr)
+        #lr = 0.0005
+        lr= 0.0005
+        
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -207,12 +211,14 @@ class CrossValidator:
         #lr=0.0015##Salinas BM 
         #lr=0.002 PaviaU old
         #210224 lr = 0.0005 #PaviU
-        #lr = 0.00025
-        #modified_lr = [
-        #    {"params": list(net.parameters())[1:], "lr": lr},
-        #    {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
-        #]
-        #optimizer = optim.Adam(modified_lr, lr=lr)
+        # #lr = 0.00025
+        modified_lr = [
+            {"params": list(net.parameters())[1:], "lr": lr},
+            {"params": list(net.parameters())[:1], "lr": 10 * lr},
+           #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
+        ]
+        optimizer = optim.Adam(modified_lr, lr=lr)
+        #optimizer = optim.Adam(net.parameters(), lr=lr)
 
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
@@ -265,7 +271,7 @@ class CrossValidator:
             net.train()
             avg_loss = 0.
             print(net.feature_selector.get_gates('prob'))
-            print(net.feature_selector.get_gates('raw'))
+            #print(net.feature_selector.get_gates('raw'))
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
                 if self.save_gates_progression and hasattr(net, "feature_selector"):
@@ -287,6 +293,8 @@ class CrossValidator:
                 except:
                   traceback.print_exc() 
                   reg = 0
+                #if e>25:
+                #    reg=0
                 loss = criterion(output, target) + lam * reg
                 #print("loss_with_reg0",loss_with_reg)
                 #loss = criterion(output, target)

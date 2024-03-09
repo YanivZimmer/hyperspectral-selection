@@ -10,6 +10,7 @@ import torch.optim as optim
 
 from models.baseline import Baseline, BaselineFS
 from models.hamida import HamidaEtAl, HamidaFS, HamidaL1
+from models.chen import ChenFS,Chen
 from models.extra_models import *
 
 
@@ -107,6 +108,24 @@ def get_model(name, **kwargs):
         #optimizer = None#LDoG(model.parameters())
         kwargs.setdefault("batch_size", 256)
         criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+    elif name == "chen_fs":
+        patch_size = kwargs.setdefault("patch_size", 5)
+        center_pixel = True
+        model = ChenFS(
+            n_bands,
+            n_classes,
+            lam=kwargs["lam"],
+            sigma=0.5,
+            patch_size=patch_size,
+            headstart_idx=kwargs["headstart_idx"],
+            device=kwargs["device"],
+            target_number=kwargs["bands_amount"]
+        )
+        lr = kwargs.setdefault("learning_rate", 0.01)
+        optimizer = optim.Adam(model.parameters(), lr=0.0001)  # , weight_decay=0.0005)
+        kwargs.setdefault("batch_size", 256)
+        criterion = nn.CrossEntropyLoss(weight=kwargs["weights"])
+
     elif name == "lee":
         kwargs.setdefault("epoch", 200)
         patch_size = kwargs.setdefault("patch_size", 5)
