@@ -24,7 +24,7 @@ from typing import List
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"sub_regu_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"sunshine_{target_bands}")
 
         self.n_folds = n_folds
         self.display = display
@@ -200,8 +200,8 @@ class CrossValidator:
         optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
         averager = None #PolynomialDecayAverager(net)
         #lr = 0.0005
-        lr= 0.0005
-        
+        #lr= 0.0005
+        lr= 0.001
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -212,13 +212,13 @@ class CrossValidator:
         #lr=0.002 PaviaU old
         #210224 lr = 0.0005 #PaviU
         # #lr = 0.00025
-        modified_lr = [
-            {"params": list(net.parameters())[1:], "lr": lr},
-            {"params": list(net.parameters())[:1], "lr": 10 * lr},
-           #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
-        ]
-        optimizer = optim.Adam(modified_lr, lr=lr)
-        #optimizer = optim.Adam(net.parameters(), lr=lr)
+        # modified_lr = [
+        #     {"params": list(net.parameters())[1:], "lr": lr},
+        #     {"params": list(net.parameters())[:1], "lr": 25 * lr},
+        #    #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
+        # ]
+        # optimizer = optim.Adam(modified_lr, lr=lr)
+        optimizer = optim.Adam(net.parameters(), lr=lr)
 
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
@@ -233,8 +233,10 @@ class CrossValidator:
 
         losses = np.zeros(1000000)
         regs = np.zeros(1000000)
+        corr = np.zeros(1000000)
         mean_losses = np.zeros(100000000)
         mean_regs = np.zeros(100000000)
+        mean_corr = np.zeros(100000000)
         iter_ = 1
         loss_win, val_win = None, None
         val_accuracies = []
@@ -287,14 +289,20 @@ class CrossValidator:
                 output = net(data)
                 # target = target - 1
                 reg = 0
+                cross_corr = 0
                 try:
-                    reg = net.regularization()# if not regu_weird else regu_early_start*net.regularization()
+                    reg = net.regularization()# if not regu_weird else regu_early_start*net.regularization()#
+                    #cross_corr = net.feature_selector.compute_ncc_batch(images_tensor=data)
                 #TODO -specific error
+                except KeyboardInterrupt:
+                    exit(0)
                 except:
-                  traceback.print_exc() 
+                  traceback.print_exc()
                   reg = 0
                 #if e>25:
                 #    reg=0
+                #loss = criterion(output, target) + lam * (0*reg + cross_corr)
+                #loss = criterion(output, target) + lam * (0.1*reg + cross_corr)
                 loss = criterion(output, target) + lam * reg
                 #print("loss_with_reg0",loss_with_reg)
                 #loss = criterion(output, target)
@@ -324,14 +332,16 @@ class CrossValidator:
                 losses[iter_] = loss.item()
                 mean_losses[iter_] = np.mean(losses[max(0, iter_ - 100):iter_ + 1])
                 regs[iter_] = reg
+                corr[iter_] = cross_corr
                 mean_regs[iter_] = np.mean(regs[max(0, iter_ - 100):iter_ + 1])
+                mean_corr[iter_] = np.mean(corr[max(0, iter_ - 100):iter_ + 1])
 
                 if display_iter and iter_ % display_iter == 0:
-                    string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f}'
+                    string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f} Corr: {:.6f}'
                     string = string.format(
                         e, epoch, batch_idx *
                                   len(data), len(data) * len(data_loader),
-                                  100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_])
+                                  100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_], mean_corr[iter_])
                     update = None if loss_win is None else 'append'
                     loss_win = display.line(
                         X=np.arange(iter_ - display_iter, iter_),

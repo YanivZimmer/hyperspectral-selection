@@ -26,7 +26,7 @@ class FeatureSelector(nn.Module):
         self.extra_noise= torch.zeros(input_dim,device=self.device)
         if not self.headstart_idx_to_tensor(self.headstart_idx,const_mask=const_mask):
             self.mu = torch.nn.Parameter(
-                0.01
+                0.001
                 * torch.randn(
                     input_dim,
                     device=self.device
@@ -63,7 +63,7 @@ class FeatureSelector(nn.Module):
 
         # Find the indices where the values are greater than the k-th value
         above_k_indices = torch.nonzero(input_tensor >= kth_value).squeeze()
-        self.last_topk = above_k_indices
+        #self.last_topk = above_k_indices
 
         shuf= torch.randperm(above_k_indices.size(0))
         #print(shuf)
@@ -102,7 +102,8 @@ class FeatureSelector(nn.Module):
         #topk = torch.topk(stochastic_gate, k,sorted = True).indices
         #topk = torch.sort(topk).values
         topk = self.get_topk_stable(stochastic_gate,k)
-        #self.last_topk = topk
+        #topk = self.get_topk_stable(z, k)
+        self.last_topk = topk
         #print(x.shape,'a')
         x = x[:, topk]
         #print(x.shape,'b')
@@ -127,6 +128,104 @@ class FeatureSelector(nn.Module):
         #print(x[self.last_topk].shape)
         #return 0.5 * (1 + torch.erf(x[self.last_topk] / math.sqrt(2)))
         return 0.5 * (1 + torch.erf(x / math.sqrt(2)))
+
+    def compute_ncc_batch(self,images_tensor):
+        images_tensor = images_tensor[:, :, self.last_topk]
+        batch_size = images_tensor.shape[0]
+        n_images = images_tensor.shape[2]
+        images_tensor = torch.transpose(images_tensor, 2, 4)
+        images_tensor = images_tensor * (self.hard_sigmoid(self.mu[self.last_topk])+0.01)
+        images_tensor = torch.transpose(images_tensor, 2, 4)
+
+        reshaped_images = images_tensor.view(batch_size, n_images, -1)
+
+        # Compute the mean of each image
+        means = reshaped_images.mean(dim=2, keepdim=True)
+
+        # Compute the normalized images
+        normalized_images = reshaped_images - means
+
+        # Compute the norms of the images
+        norms = torch.norm(normalized_images, dim=2)
+
+        # Compute the outer product of the normalized images
+        outer_products = torch.matmul(normalized_images, normalized_images.transpose(1, 2))
+
+        # Set diagonal elements to zero to exclude self-interactions
+        outer_products = outer_products - torch.diag_embed(torch.diagonal(outer_products, dim1=1, dim2=2))
+
+        # Compute the NCC scores
+        ncc_scores = outer_products / (norms[:, :, None] * norms[:, None, :])
+        #ncc_scores = torch.abs(ncc_scores)
+        ncc_scores = torch.pow(ncc_scores,2)
+
+        # Compute the mean NCC score for each batch
+        mean_ncc_scores = ncc_scores.mean(dim=(0))
+        #mean_ncc_scores *= self.hard_sigmoid(self.mu[self.last_topk])
+        mean_ncc_scores = mean_ncc_scores.mean(dim=(0, 1))
+
+        #print(torch.mean(mean_ncc_scores))
+        return torch.mean(mean_ncc_scores)
+
+    def compute_jm_distance(self,raw_input):
+        # Reshape tensor to have dimensions (batch_size, 4, 25)
+        images_tensor = raw_input[:,:,self.last_topk]
+
+        batch_size = images_tensor.shape[0]
+        n_images = images_tensor.shape[2]
+        print(images_tensor[:,:,0])
+        reshaped_images = images_tensor.view(batch_size, n_images, -1)
+
+        # Compute histograms for each image
+        histograms = torch.histc(reshaped_images, bins=256, min=0, max=1)
+
+        # Normalize histograms
+        histograms /= histograms.sum(dim=2, keepdim=True)
+
+        # Compute Bhattacharyya coefficients
+        bc = torch.sqrt(histograms.unsqueeze(1) * histograms.unsqueeze(2)).sum(dim=3)
+
+        # Compute Bhattacharyya distances
+        b_distance = -torch.log(bc)
+
+        # Compute Jeffries-Matusita distances
+        jm_distances = torch.sqrt(2 * (1 - torch.exp(-b_distance)))
+
+        return jm_distances
+
+    def norm_cross_correlations(self,raw_input):
+        #print(raw_input.shape)
+        #print(self.last_topk)
+        images = raw_input[:,:,self.last_topk]
+        #print(images.shape)
+        count = 0
+        batch_size= images.shape[0]
+        n_images = images.shape[2]
+        for b in range(batch_size):
+            for i in range(n_images):
+                for j in range(n_images):
+                    if i==j:
+                        continue
+                    count+=self.pair_norm_cross_correlations(images[b,:,i],images[b,:,j])
+        count /=(n_images*(n_images-1))
+        count /=batch_size
+        #print("cross_corr",count)
+        return count
+
+    def pair_norm_cross_correlations(self,image1, image2):
+        #print(image1.shape)
+        #print(image1)
+        mean_image1 = torch.mean(image1)
+        mean_image2 = torch.mean(image2)
+
+        # Compute numerator and denominator
+        numerator = torch.sum((image1 - mean_image1) * (image2 - mean_image2))
+        denominator = torch.sqrt(torch.sum((image1 - mean_image1) ** 2) * torch.sum((image2 - mean_image2) ** 2))
+
+        # Compute NCC score
+        ncc_score = numerator / denominator
+
+        return ncc_score
 
     def _apply(self, fn):
         super(FeatureSelector, self)._apply(fn)
@@ -162,13 +261,13 @@ class FeatureSelector(nn.Module):
             self.mask = headstart_mask
             return False
         self.mu = torch.nn.Parameter(
-            0.01
+            0.001
             * (
                 torch.randn(
                     self.input_dim,
                     device=self.device
                 )
-            )+0.25*headstart_mask,#0.01*headstart_mask,
+            )+0.3*headstart_mask-0.1,#0.01*headstart_mask,
             requires_grad=True
         )
         print(self.mu)
