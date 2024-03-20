@@ -408,7 +408,7 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
 
 
 if __name__ == '__main__':
-    train_test(lam=LAM, use_ehbs=False, n_folds=5
+    train_test(lam=LAM, use_ehbs=True, n_folds=5
                ,batch_size=BATCH_SIZE, save_net=False)
     #x = 2
     #y = 5

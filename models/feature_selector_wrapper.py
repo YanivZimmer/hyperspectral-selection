@@ -22,13 +22,13 @@ class FeatureSelectionWrapper:
         headstart_idx=None,
     ):
         self.input_channels = input_channels
-        self.feature_selector = FeatureSelector(
-            self.input_channels, sigma=sigma, device=device, target_number=target_number, headstart_idx=headstart_idx
-        )
-        # self.feature_selector = FeatureSelectorMega(
+        #self.feature_selector = FeatureSelector(
+        #      self.input_channels, sigma=sigma, device=device, target_number=target_number, headstart_idx=headstart_idx
+        #)
+        # # self.feature_selector = FeatureSelectorMega(
         #      self.input_channels, device=device, target_number=target_number
         # )
-        #self.feature_selector =ConcreteEncoder(input_dim=self.input_channels, output_dim=target_number, device=device)
+        self.feature_selector =ConcreteEncoder(input_dim=self.input_channels, output_dim=target_number, device=device)
         self.target_number = target_number
         self.test = False
         self.k = None

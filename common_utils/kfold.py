@@ -21,6 +21,8 @@ import statistics
 from common_utils.utils import metrics,metrics_to_average
 from common_utils.results_saver import ResultsSaver
 from typing import List
+PATH="hamida_weights"
+
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
@@ -202,7 +204,7 @@ class CrossValidator:
         averager = None #PolynomialDecayAverager(net)
         #lr = 0.0005
         #lr= 0.0005
-        lr= 0.0001*5
+        lr= 0.0001*25
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -218,8 +220,8 @@ class CrossValidator:
         #     {"params": list(net.parameters())[:1], "lr": 10 * lr},
         #    #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
         # ]
-        # optimizer = optim.Adam(modified_lr, lr=lr)
-        optimizer = optim.Adam(net.parameters(), lr=lr)
+        # optimizer = optim.Adam(modified_lr, lr=lr)#
+        optimizer = optim.Adam([{"params": net.fs_params, "lr": lr}], lr=lr)
 
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
@@ -227,7 +229,8 @@ class CrossValidator:
 
         if hasattr(net, "set_fs_device"):
             net.set_fs_device(device=device)
-
+            
+        net.load_state_dict(torch.load(PATH),strict=False)
         net.to(device)
 
         save_epoch = epoch // 20 if epoch > 20 else 1
@@ -248,12 +251,16 @@ class CrossValidator:
             #print(averager)
             #print("e",e,"temp",net.feature_selector.temp)
             if e == self.reset_gates:
-                net.reset_gates()#
-                optimizer = optim.Adam(net.parameters(), lr=lr)
-            if regu_weird:
-                regu_early_start = min(regu_early_start + regu_early_step, 1)
-                print("Discount factor=", regu_early_start)
+                pass
+                #assuming the downstream model was the 0
+                #torch.save(net.state_dict(),PATH)
+                #net.reset_gates()#
+                #optimizer = optim.Adam(net.parameters(), lr=lr)
+            #if regu_weird:
+            #    regu_early_start = min(regu_early_start + regu_early_step, 1)
+            #    print("Discount factor=", regu_early_start)
             # Set the network to training mode
+            print("hi")
             net.train()
             avg_loss = 0.
             #print(net.feature_selector.get_gates('prob'))

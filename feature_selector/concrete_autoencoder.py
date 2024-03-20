@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class ConcreteEncoder(nn.Module):
-    def __init__(self, input_dim, output_dim,device="cuda", start_temp=10.0, min_temp=0.01, alpha=0.9999):
+    def __init__(self, input_dim, output_dim,device="cuda", start_temp=1.0, min_temp=0.01, alpha=0.9999):
         super().__init__()
         self.device = device
         self.start_temp = start_temp

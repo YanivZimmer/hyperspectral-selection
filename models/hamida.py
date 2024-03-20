@@ -7,7 +7,7 @@ from feature_selector.feature_selector_general import FeatureSelector
 from feature_selector.feature_selector_l1_conv import FeatureSelectorL1Conv
 from .feature_selector_wrapper import FeatureSelectionWrapper
 from .feature_selector_l1_wrapper import FeatureSelectionL1Wrapper
-
+PATH="hamida_weights"
 
 class HamidaEtAl(nn.Module):
     """
@@ -115,7 +115,7 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
         HamidaEtAl.__init__(
             self, target_number, n_classes, patch_size=patch_size, dilation=dilation
         )
-
+        self.downstream_model = HamidaEtAl
         FeatureSelectionWrapper.__init__(
             self,
             input_channels,
@@ -125,10 +125,54 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
             target_number=target_number,
             headstart_idx=headstart_idx,
         )
+        #for param in HamidaEtAl.parameters(self=HamidaEtAl):
+        #  param.requires_grad = False
+        self.fs_params=[]
+        for module in self.modules():
+          if isinstance(module, HamidaEtAl):
+            for param in module.parameters():
+              print(type(param),param)
+              self.fs_params.append(param)
 
+        #for name, param in self.named_parameters():
+        #  if "HamidaEtAl" in name:
+        #    param.requires_grad = False
+        #HamidaEtAl.load_state_dict(torch.load(PATH))
+        #HamidaEtAl.load_state_dict(torch.load(CHECKPOINT))
     def forward(self, x):
         x = self.feature_selector.forward(x)
+        #with torch.no_grad():
         x = HamidaEtAl.forward(self=self, x=x)
+        return x
+
+
+class HamidaFS123(nn.Module):#HamidaEtAl, FeatureSelectionWrapper):
+    def __init__(
+        self,
+        input_channels,
+        n_classes,
+        patch_size=5,
+        dilation=1,
+        lam=1,
+        sigma=0.5,
+        headstart_idx=None,
+        device="cuda:0",
+        target_number=10        
+    ):
+        self.down_model=HamidaEtAl(target_number, n_classes, patch_size=patch_size, dilation=dilation)
+        self.feature_selector_wrapper=\
+        FeatureSelectionWrapper(
+            input_channels,
+            sigma=sigma,
+            lam=lam,
+            device=device,
+            target_number=target_number,
+            headstart_idx=headstart_idx,
+        )
+
+    def forward(self, x):
+        x = self.feature_selector_wrapper.feature_selector.forward(x)
+        x = self.down_model.forward(self=self, x=x)
         return x
 
 
