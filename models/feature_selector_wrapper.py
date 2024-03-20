@@ -2,6 +2,8 @@ import numpy as np
 import torch
 
 from feature_selector.feature_selector_general import FeatureSelector
+from feature_selector.feature_selector_mega import FeatureSelectorMega
+from feature_selector.concrete_autoencoder import ConcreteEncoder
 
 
 class FeatureSelectionWrapper:
@@ -23,23 +25,27 @@ class FeatureSelectionWrapper:
         self.feature_selector = FeatureSelector(
             self.input_channels, sigma=sigma, device=device, target_number=target_number, headstart_idx=headstart_idx
         )
+        # self.feature_selector = FeatureSelectorMega(
+        #      self.input_channels, device=device, target_number=target_number
+        # )
+        #self.feature_selector =ConcreteEncoder(input_dim=self.input_channels, output_dim=target_number, device=device)
         self.target_number = target_number
         self.test = False
         self.k = None
-        self.reg = self.feature_selector.regularizer
+        self.reg = lambda x:0 #self.feature_selector.regularizer
         self.sigma = sigma
         self.lam = lam
         self.device = device
         self.headstart_idx = headstart_idx
-
-        self.mu = self.feature_selector.mu
+        self.mu = None#self.feature_selector.mu
 
     def reset_gates(self):
         print("The device is ", self.device)
-        self.feature_selector = FeatureSelector(
-            self.input_channels, sigma=self.sigma, device=self.device, target_number=self.target_number, headstart_idx=None#self.headstart_idx
-        )
-        self.mu = self.feature_selector.mu
+        # self.feature_selector = FeatureSelector(
+        #     self.input_channels, sigma=self.sigma, device=self.device, target_number=self.target_number, headstart_idx=None#self.headstart_idx
+        # )
+        # self.mu = self.feature_selector.mu
+        self.feature_selector = ConcreteEncoder(input_dim=self.input_channels, output_dim=self.target_number, device=self.device)
 
 
     def forward(self, x):
@@ -48,6 +54,7 @@ class FeatureSelectionWrapper:
         return self.feature_selector.forward(x)
 
     def regularization(self):
+        return 0
         # If fs is using constant masking regularization of it should be 0
         if self.feature_selector.mask is not None:
             return torch.Tensor([0]).to(self.feature_selector.device)

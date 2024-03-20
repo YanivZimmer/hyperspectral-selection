@@ -170,7 +170,8 @@ class CrossValidator:
         gates = model.get_gates(mode="prob")
         if gates is None:
             return None, 0, 0
-        return gates, sum(gates == 1), sum(gates > 0)
+        #return gates, sum(gates == 1), sum(gates > 0)
+        return torch.argmax(gates),0,0
 
     def train(self, net, optimizer, criterion, data_loader, epoch,
               fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
@@ -201,7 +202,7 @@ class CrossValidator:
         averager = None #PolynomialDecayAverager(net)
         #lr = 0.0005
         #lr= 0.0005
-        lr= 0.001
+        lr= 0.0001*5
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -214,7 +215,7 @@ class CrossValidator:
         # #lr = 0.00025
         # modified_lr = [
         #     {"params": list(net.parameters())[1:], "lr": lr},
-        #     {"params": list(net.parameters())[:1], "lr": 25 * lr},
+        #     {"params": list(net.parameters())[:1], "lr": 10 * lr},
         #    #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
         # ]
         # optimizer = optim.Adam(modified_lr, lr=lr)
@@ -241,39 +242,28 @@ class CrossValidator:
         loss_win, val_win = None, None
         val_accuracies = []
         train_accuracies = []
-
+        prev_gates=None
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
             #print(optimizer)
             #print(averager)
+            #print("e",e,"temp",net.feature_selector.temp)
             if e == self.reset_gates:
                 net.reset_gates()#
-                # modified_lr = [
-                #    {"params": list(net.parameters())[1:], "reps_rel":0.01},
-                #    {"params": list(net.parameters())[:1], "reps_rel":1e-10 },
-                # ]
-                # modified_lr = [
-                #    {"params": list(net.parameters())[1:], "lr": 0},
-                #    {"params": list(net.parameters())[:1], "lr": -math.log2(lr) * 2 * lr},
-                # ]
-                # optimizer = LDoG(net.parameters())  # , reps_rel=1e-6)#
-                #for param in list(net.parameters()[1:]):
-                #    param.grad = None
-                #optimizer = LDoG([{"params": list(net.feature_selector.parameters())}], reps_rel=1e-4)
-                optimizer  = optim.SGD([{"params": list(net.feature_selector.parameters())}],lr=0.01)
-                averager = None#PolynomialDecayAverager(net.feature_selector)
-                #modified_lr = [
-                #   {"params": list(net.parameters())[1:], "lr": lr},
-                #   {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
-                #]
-                #optimizer = optim.Adam(modified_lr, lr=lr)
+                optimizer = optim.Adam(net.parameters(), lr=lr)
             if regu_weird:
                 regu_early_start = min(regu_early_start + regu_early_step, 1)
                 print("Discount factor=", regu_early_start)
             # Set the network to training mode
             net.train()
             avg_loss = 0.
-            print(net.feature_selector.get_gates('prob'))
+            #print(net.feature_selector.get_gates('prob'))
             #print(net.feature_selector.get_gates('raw'))
+            curr = net.feature_selector.get_gates('raw')
+            if prev_gates is not None:
+                for i,sub in enumerate(prev_gates):
+                    print("diff:",curr[i]-sub)
+            prev_gates = curr
+            print("curr",curr)
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
                 if self.save_gates_progression and hasattr(net, "feature_selector"):
@@ -337,11 +327,11 @@ class CrossValidator:
                 mean_corr[iter_] = np.mean(corr[max(0, iter_ - 100):iter_ + 1])
 
                 if display_iter and iter_ % display_iter == 0:
-                    string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f} Corr: {:.6f}'
+                    string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f} Corr: {:.6f} Temp: {:.6f}'
                     string = string.format(
                         e, epoch, batch_idx *
                                   len(data), len(data) * len(data_loader),
-                                  100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_], mean_corr[iter_])
+                                  100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_], mean_corr[iter_],net.feature_selector.temp if hasattr(net.feature_selector, "temp") else -1)
                     update = None if loss_win is None else 'append'
                     loss_win = display.line(
                         X=np.arange(iter_ - display_iter, iter_),
