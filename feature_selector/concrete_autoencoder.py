@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class ConcreteEncoder(nn.Module):
-    def __init__(self, input_dim, output_dim,device="cuda", start_temp=1.0, min_temp=0.01, alpha=0.9999):
+    def __init__(self, input_dim, output_dim,device="cuda", start_temp=0.5, min_temp=0.01, alpha=0.99998):
         super().__init__()
         self.device = device
         self.start_temp = start_temp
@@ -21,7 +21,7 @@ class ConcreteEncoder(nn.Module):
 
     def forward(self, X, train=True, X_mask=None, debug=False):
         uniform = torch.rand(self.logits.shape).clamp(min=1e-7)
-        gumbel = -torch.log(-torch.log(uniform)).to(self.device)
+        gumbel = -torch.log(-torch.log(uniform)).to(self.device)*0.05
         self.temp = max([self.temp * self.alpha, self.min_temp])
         noisy_logits = (self.logits.to(self.device) + gumbel.to(self.device)) / self.temp
 

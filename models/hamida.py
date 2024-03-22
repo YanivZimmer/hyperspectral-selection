@@ -7,7 +7,9 @@ from feature_selector.feature_selector_general import FeatureSelector
 from feature_selector.feature_selector_l1_conv import FeatureSelectorL1Conv
 from .feature_selector_wrapper import FeatureSelectionWrapper
 from .feature_selector_l1_wrapper import FeatureSelectionL1Wrapper
-PATH="hamida_weights"
+from feature_selector.concrete_autoencoder import ConcreteEncoder
+
+PATH="hamida_weights1"
 
 class HamidaEtAl(nn.Module):
     """
@@ -129,11 +131,13 @@ class HamidaFS(HamidaEtAl, FeatureSelectionWrapper):
         #  param.requires_grad = False
         self.fs_params=[]
         for module in self.modules():
-          if isinstance(module, HamidaEtAl):
+          if isinstance(module, ConcreteEncoder) or isinstance(module, FeatureSelector):
             for param in module.parameters():
-              print(type(param),param)
+              print("param here is shape",param.shape)
               self.fs_params.append(param)
-
+        print("all fs.params:")
+        for i,elm in enumerate(self.fs_params):
+            print("elm",i,elm.shape)
         #for name, param in self.named_parameters():
         #  if "HamidaEtAl" in name:
         #    param.requires_grad = False

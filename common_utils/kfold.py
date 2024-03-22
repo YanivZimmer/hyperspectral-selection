@@ -21,12 +21,12 @@ import statistics
 from common_utils.utils import metrics,metrics_to_average
 from common_utils.results_saver import ResultsSaver
 from typing import List
-PATH="hamida_weights"
+PATH="hamida_weights1"
 
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"sunshine_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"gumble_{target_bands}")
 
         self.n_folds = n_folds
         self.display = display
@@ -86,10 +86,16 @@ class CrossValidator:
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
-            print(results[fold], gates_idx[fold])
-            gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
+            #TODO TEMP
+            print(results[fold])#, gates_idx[fold])
+            try:
+                gates_idx_all[fold] = torch.argmax(torch.Tensor(gates_idx[fold]),dim=1)#np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
+            except KeyboardInterrupt:
+                break
+            except Exception:
+                gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
             #TODO- this should not stay, just a temp for running only one fold
-            #break
+            break
 
         print("gates_idx_all", gates_idx_all)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.n_folds} FOLDS')
@@ -172,8 +178,9 @@ class CrossValidator:
         gates = model.get_gates(mode="prob")
         if gates is None:
             return None, 0, 0
-        #return gates, sum(gates == 1), sum(gates > 0)
-        return torch.argmax(gates),0,0
+        #print("gates$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$",torch.argmax(torch.Tensor(gates),dim=1))
+        return gates,torch.argmax(torch.Tensor(gates)),torch.argmax(torch.Tensor(gates))
+        #return torch.argmax(torch.Tensor(gates)),0,0
 
     def train(self, net, optimizer, criterion, data_loader, epoch,
               fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
@@ -200,11 +207,13 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
+        #optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
         averager = None #PolynomialDecayAverager(net)
         #lr = 0.0005
         #lr= 0.0005
-        lr= 0.0001*25
+        lr= 0.0001*20 #sess3
+        lr= 0.0001*35 #sess5
+        lr= 0.0001*20
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -222,7 +231,7 @@ class CrossValidator:
         # ]
         # optimizer = optim.Adam(modified_lr, lr=lr)#
         optimizer = optim.Adam([{"params": net.fs_params, "lr": lr}], lr=lr)
-
+        #optimizer = optim.Adam(net.parameters(), lr=lr)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -251,9 +260,9 @@ class CrossValidator:
             #print(averager)
             #print("e",e,"temp",net.feature_selector.temp)
             if e == self.reset_gates:
-                pass
                 #assuming the downstream model was the 0
                 #torch.save(net.state_dict(),PATH)
+                pass
                 #net.reset_gates()#
                 #optimizer = optim.Adam(net.parameters(), lr=lr)
             #if regu_weird:

@@ -22,9 +22,9 @@ class FeatureSelectionWrapper:
         headstart_idx=None,
     ):
         self.input_channels = input_channels
-        #self.feature_selector = FeatureSelector(
+        # self.feature_selector = FeatureSelector(
         #      self.input_channels, sigma=sigma, device=device, target_number=target_number, headstart_idx=headstart_idx
-        #)
+        # )
         # # self.feature_selector = FeatureSelectorMega(
         #      self.input_channels, device=device, target_number=target_number
         # )
@@ -32,12 +32,12 @@ class FeatureSelectionWrapper:
         self.target_number = target_number
         self.test = False
         self.k = None
-        self.reg = lambda x:0 #self.feature_selector.regularizer
+        self.reg = self.feature_selector.regularizer if hasattr(self.feature_selector,"regularizer") else lambda x:0 #
         self.sigma = sigma
         self.lam = lam
         self.device = device
         self.headstart_idx = headstart_idx
-        self.mu = None#self.feature_selector.mu
+        self.mu = self.feature_selector.mu if hasattr(self.feature_selector,"mu") else None
 
     def reset_gates(self):
         print("The device is ", self.device)
@@ -54,7 +54,8 @@ class FeatureSelectionWrapper:
         return self.feature_selector.forward(x)
 
     def regularization(self):
-        return 0
+        if self.mu is None:
+            return 0
         # If fs is using constant masking regularization of it should be 0
         if self.feature_selector.mask is not None:
             return torch.Tensor([0]).to(self.feature_selector.device)
