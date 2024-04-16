@@ -26,7 +26,7 @@ PATH="hamida_weights1"
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"gumble_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"gumble_big_patch_{target_bands}")
 
         self.n_folds = n_folds
         self.display = display
@@ -95,7 +95,7 @@ class CrossValidator:
             except Exception:
                 gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
             #TODO- this should not stay, just a temp for running only one fold
-            break
+            #break
 
         print("gates_idx_all", gates_idx_all)
         print(f'K-FOLD CROSS VALIDATION RESULTS FOR {self.n_folds} FOLDS')
@@ -213,6 +213,7 @@ class CrossValidator:
         #lr= 0.0005
         lr= 0.0001*20 #sess3
         lr= 0.0001*35 #sess5
+        #THIS IS THE LR I USED FOR PAVIAU DATASET AND GUMBLE         lr= 0.0001*20
         lr= 0.0001*20
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
@@ -230,8 +231,8 @@ class CrossValidator:
         #    #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
         # ]
         # optimizer = optim.Adam(modified_lr, lr=lr)#
-        optimizer = optim.Adam([{"params": net.fs_params, "lr": lr}], lr=lr)
-        #optimizer = optim.Adam(net.parameters(), lr=lr)
+        #optimizer = optim.Adam([{"params": net.fs_params, "lr": lr}], lr=lr)
+        optimizer = optim.Adam(net.parameters(), lr=lr)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
@@ -239,7 +240,7 @@ class CrossValidator:
         if hasattr(net, "set_fs_device"):
             net.set_fs_device(device=device)
             
-        net.load_state_dict(torch.load(PATH),strict=False)
+        #net.load_state_dict(torch.load(PATH),strict=False)
         net.to(device)
 
         save_epoch = epoch // 20 if epoch > 20 else 1

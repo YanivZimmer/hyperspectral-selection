@@ -59,7 +59,7 @@ class Visualizer:
         return bs_to_auc
 
 
-    def draw_bs_methods_acc(self,bs_acc, bs_n_bands):
+    def draw_bs_methods_acc(self,bs_acc, bs_n_bands,path):
         bs_auc = self.auc(bs_acc,bs_n_bands)
         for i,name in enumerate(bs_acc.keys()):
             print(name)
@@ -77,5 +77,5 @@ class Visualizer:
         plt.legend()
         print("Hello")
         #plt.show()
-        plt.savefig(f'/home/dsi/yanivz/hyperspectral-selection/visualization/pavia7_bs_ehbs.png')
+        plt.savefig(path)
 

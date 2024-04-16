@@ -339,7 +339,7 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
     if not use_ehbs:
         all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
     else:
-        all_algo_n_bands_to_selection = {"gambel" : []}
+        all_algo_n_bands_to_selection = {"gambel_0.05noise_0.5_to_0.01temp_99991_alpha" : []}
     # run the experiment several times
 
     #train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
@@ -408,7 +408,7 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
 
 
 if __name__ == '__main__':
-    train_test(lam=LAM, use_ehbs=True, n_folds=5
+        train_test(lam=LAM, use_ehbs=True, n_folds=5
                ,batch_size=BATCH_SIZE, save_net=False)
     #x = 2
     #y = 5

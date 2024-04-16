@@ -28,7 +28,7 @@ class FeatureSelectionWrapper:
         # # self.feature_selector = FeatureSelectorMega(
         #      self.input_channels, device=device, target_number=target_number
         # )
-        self.feature_selector =ConcreteEncoder(input_dim=self.input_channels, output_dim=target_number, device=device)
+        self.feature_selector = ConcreteEncoder(input_dim=self.input_channels, output_dim=target_number, device=device,headstart_idx=headstart_idx)
         self.target_number = target_number
         self.test = False
         self.k = None
