@@ -1,13 +1,15 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import math
 
 
 class ConcreteEncoder(nn.Module):
-    def __init__(self, input_dim, output_dim,device="cuda", start_temp=0.5, min_temp=0.01, alpha=0.99991,headstart_idx=None):#start_temp=0.5, min_temp=0.01, alpha=0.99998):
+    def __init__(self, input_dim, output_dim,device="cuda", start_temp=1.5, min_temp=0.01, alpha=0.99991,headstart_idx=None):#start_temp=0.5, min_temp=0.01, alpha=0.99998):
         super().__init__()
         self.headstart_idx = headstart_idx
         #self.headstart_idx=[196,  78,  35]
+        #self.headstart_idx=[17, 175,   4,  70,  45]
         self.device = device
         self.start_temp = start_temp
         self.min_temp = min_temp
@@ -17,17 +19,40 @@ class ConcreteEncoder(nn.Module):
         #out of input_dim select size of output_dim (emaple 25->1). multiple the 1 hot with the original data
         self.logits = nn.Parameter(torch.empty(output_dim, input_dim))
         #default was xavier_normal  nn.init.xavier_normal_(self.logits)
-        nn.init.xavier_normal_(self.logits)
+        nn.init.zeros_(self.logits)
 
         new_logits = self.logits.clone().detach()
 
-        constant = 1/(2*output_dim)
+        constant = 1
         if self.headstart_idx is not None:
             # Iterate over the output_dim
             for i, idx in enumerate(self.headstart_idx):
                 # Increase the logits at the corresponding index by a constant
                 new_logits[i, idx] += constant
 
+        # for i in range(new_logits.shape[0]+1):
+        #     for idx in range(math.ceil(new_logits.shape[1]//new_logits.shape[0])+1):
+        #         # Increase the logits at the corresponding index by a constant
+        #         print(i, idx+i*(math.ceil(new_logits.shape[1]//new_logits.shape[0])))
+        #         if idx+i*(math.ceil(new_logits.shape[1]//new_logits.shape[0]))>new_logits.shape[1]:
+        #             break
+
+        for i in range(new_logits.shape[0]):
+            for idx in range(new_logits.shape[1]//new_logits.shape[0]+1):
+                # Increase the logits at the corresponding index by a constant
+                print(i, idx+i*(math.ceil(new_logits.shape[1]//new_logits.shape[0])))
+                if idx+i*(math.ceil(new_logits.shape[1]/new_logits.shape[0]))>=new_logits.shape[1]:
+                    print("hello")
+                    break
+                new_logits[i, idx+i*(math.ceil(new_logits.shape[1]/new_logits.shape[0]))] += constant
+        #for j in range(new_logits.shape[1]%new_logits.shape[0]):
+            #new_logits[new_logits.shape[0]-1,-j]+=constant
+            #print(i,-j)
+        print(new_logits[0])
+        print(new_logits[1])
+        print(new_logits[2])
+        #print(new_logits[3])
+        #print(new_logits[4])
         # Assign the new tensor to self.logits
         self.logits = nn.Parameter(new_logits)
         self.regularizer = lambda : 0
@@ -36,8 +61,17 @@ class ConcreteEncoder(nn.Module):
 
     def forward(self, X, train=True, X_mask=None, debug=False):
         uniform = torch.rand(self.logits.shape).clamp(min=1e-7)
-        gumbel = -torch.log(-torch.log(uniform)).to(self.device)*0.15
+        gumbel = -torch.log(-torch.log(uniform)).to(self.device)*0.15# it was 0.05 before
         self.temp = max([self.temp * self.alpha, self.min_temp])
+        if self.temp>1.5:
+            self.temp *= self.alpha
+        if self.temp>1.0:
+            self.temp *= self.alpha
+        if self.temp>2.0:
+            self.temp *= self.alpha
+        if self.temp > 8.0:
+            self.temp *= self.alpha
+
         noisy_logits = (self.logits.to(self.device) + gumbel.to(self.device)) / self.temp
 
         if X_mask is not None:

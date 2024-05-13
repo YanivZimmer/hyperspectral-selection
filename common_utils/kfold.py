@@ -21,12 +21,14 @@ import statistics
 from common_utils.utils import metrics,metrics_to_average
 from common_utils.results_saver import ResultsSaver
 from typing import List
-PATH="hamida_weights1"
+from torch.optim.lr_scheduler import StepLR
+
+PATH="hamida_salinas_weights1"
 
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"gumble_big_patch_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"gumble_hs_ones_{target_bands}")
 
         self.n_folds = n_folds
         self.display = display
@@ -214,7 +216,7 @@ class CrossValidator:
         lr= 0.0001*20 #sess3
         lr= 0.0001*35 #sess5
         #THIS IS THE LR I USED FOR PAVIAU DATASET AND GUMBLE         lr= 0.0001*20
-        lr= 0.0001*20
+        lr= 0.0001*20#15#25
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -233,12 +235,13 @@ class CrossValidator:
         # optimizer = optim.Adam(modified_lr, lr=lr)#
         #optimizer = optim.Adam([{"params": net.fs_params, "lr": lr}], lr=lr)
         optimizer = optim.Adam(net.parameters(), lr=lr)
+        scheduler = None#StepLR(optimizer, step_size=10, gamma=0.9)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
-
-        if hasattr(net, "set_fs_device"):
-            net.set_fs_device(device=device)
+        #
+        # if hasattr(net, "set_fs_device"):
+        #     net.set_fs_device(device=device)
             
         #net.load_state_dict(torch.load(PATH),strict=False)
         net.to(device)
@@ -257,6 +260,8 @@ class CrossValidator:
         train_accuracies = []
         prev_gates=None
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
+            if scheduler is not None:
+                scheduler.step()
             #print(optimizer)
             #print(averager)
             #print("e",e,"temp",net.feature_selector.temp)
@@ -332,6 +337,7 @@ class CrossValidator:
                 # optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                
                 if averager is not None:
                     averager.step()
 
