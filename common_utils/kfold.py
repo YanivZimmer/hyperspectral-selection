@@ -28,7 +28,7 @@ PATH="hamida_salinas_weights1"
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"gumble_hs_ones_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"retro_{target_bands}")#
 
         self.n_folds = n_folds
         self.display = display
@@ -209,8 +209,8 @@ class CrossValidator:
             val_loader (optional): validation dataset
             supervision (optional): 'full' or 'semi'
         """
-        #optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
-        averager = None #PolynomialDecayAverager(net)
+        optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
+        averager = None#PolynomialDecayAverager(net)
         #lr = 0.0005
         #lr= 0.0005
         lr= 0.0001*20 #sess3

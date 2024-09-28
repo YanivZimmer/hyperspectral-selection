@@ -331,6 +331,7 @@ def model_creator_func(**hyperparams):
 
 
 def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
+    print(f"now for {BANDS_AMOUNT} bands")
     bands_acc_mapping_total = {}
     bands_kappa_mapping_total = {}
     gates_acc_mapping_total = {}
@@ -339,7 +340,9 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
     if not use_ehbs:
         all_algo_n_bands_to_selection = read_dict(f'algo_bands_mapping_results_temp_{DATASET}.json')
     else:
-        all_algo_n_bands_to_selection = {"gambel_thirds_hs10folds_lr2e-2_zeros_init_0.15noise_1.5_to_0.01temp_99991_alpha" : []}
+        #all_algo_n_bands_to_selection = {"gambel_thirds_hs10folds_lr2e-2_zeros_init_0.15noise_1.5_to_0.01temp_99991_alpha" : []}
+        all_algo_n_bands_to_selection = {#
+            "ehbs_new_exp": []}
     # run the experiment several times
 
     #train_gt, test_gt = sample_gt(gt, SAMPLE_PERCENTAGE, mode=SAMPLING_MODE)
@@ -361,7 +364,7 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
     gates_idx_mapping = {}
     algo_n_bands_acc = {}
     bands_amount = [BANDS_AMOUNT]
-    for algo in all_algo_n_bands_to_selection.keys(): #['STG-PRESET','BS-NETS-Conv','BS-NETS-FC','ISSC','WALUMI','WALUDI']:#
+    for algo in ["genetic"]:#all_algo_n_bands_to_selection.keys(): #['STG-PRESET','BS-NETS-Conv','BS-NETS-FC','ISSC','WALUMI','WALUDI']:#
         print(algo)
         n_bands_to_selection = all_algo_n_bands_to_selection[algo]
         for n_selected_bands in bands_amount:
@@ -408,7 +411,10 @@ def train_test(lam, use_ehbs = True,batch_size=512, n_folds=6,save_net = False):
 
 
 if __name__ == '__main__':
-        train_test(lam=LAM, use_ehbs=True, n_folds=10
+    for my_n_bands in range(3,9):
+        BANDS_AMOUNT=my_n_bands
+        #print(f"now for {BANDS_AMOUNT} bands")
+        train_test(lam=LAM, use_ehbs=False, n_folds=10
                ,batch_size=BATCH_SIZE, save_net=False)
     #x = 2
     #y = 5

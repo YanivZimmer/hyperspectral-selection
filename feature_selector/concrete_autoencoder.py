@@ -5,13 +5,13 @@ import math
 
 
 class ConcreteEncoder(nn.Module):
-    def __init__(self, input_dim, output_dim,device="cuda", start_temp=1.5, min_temp=0.01, alpha=0.99991,headstart_idx=None):#start_temp=0.5, min_temp=0.01, alpha=0.99998):
+    def __init__(self, input_dim, output_dim,device="cuda", start_temp=2.5, min_temp=0.01, alpha=0.99991,headstart_idx=None):#start_temp=0.5, min_temp=0.01, alpha=0.99998):
         super().__init__()
         self.headstart_idx = headstart_idx
         #self.headstart_idx=[196,  78,  35]
         #self.headstart_idx=[17, 175,   4,  70,  45]
         self.device = device
-        self.start_temp = start_temp
+        self.start_temp = start_temp#
         self.min_temp = min_temp
         self.alpha = alpha
 
@@ -54,14 +54,21 @@ class ConcreteEncoder(nn.Module):
         #print(new_logits[3])
         #print(new_logits[4])
         # Assign the new tensor to self.logits
-        self.logits = nn.Parameter(new_logits)
+        # cl_mask = [1, 1, 1, 1, 1 ,1 ,1 ,1 ,1 ,1 ,1 ,1 ,1 ,1 ,1 ,1 ,1 ,1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        #            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2,
+        #            2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+        # self.logits = nn.Parameter(self.clustered_mask(cl_mask,5))#nn.Parameter(new_logits)
+        print(self.logits[0])
+        print(self.logits[1])
+        print(self.logits[2])
+#
         self.regularizer = lambda : 0
         print(self.logits.detach().cpu().numpy())
 
 
     def forward(self, X, train=True, X_mask=None, debug=False):
         uniform = torch.rand(self.logits.shape).clamp(min=1e-7)
-        gumbel = -torch.log(-torch.log(uniform)).to(self.device)*0.15# it was 0.05 before
+        gumbel = -torch.log(-torch.log(uniform)).to(self.device)*0.5#0.15# it was 0.05 before
         self.temp = max([self.temp * self.alpha, self.min_temp])
         if self.temp>1.5:
             self.temp *= self.alpha
@@ -95,3 +102,15 @@ class ConcreteEncoder(nn.Module):
 
     def get_gates(self, mode):
         return self.logits.detach().cpu().numpy()
+    def clustered_mask(self,mask,n_clusters):
+        import numpy as np
+        mask=np.array(mask)
+        constant=1
+        new_logits = 0.0001 * self.logits.clone().detach() - 0.025
+        for cluster_idx in range(n_clusters):
+            cluster_bands = np.where(mask == cluster_idx,True,False)
+            print(cluster_bands)
+            print(new_logits.shape)
+            new_logits[cluster_idx, cluster_bands] += constant
+            print(new_logits)
+        return new_logits
