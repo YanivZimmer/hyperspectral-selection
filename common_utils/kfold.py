@@ -21,10 +21,14 @@ import statistics
 from common_utils.utils import metrics,metrics_to_average
 from common_utils.results_saver import ResultsSaver
 from typing import List
+from torch.optim.lr_scheduler import StepLR
+
+PATH="hamida_salinas_weights1"
+
 class CrossValidator:
     Patience = 250
     def __init__(self, display, dataset, dataset_name, n_folds, patch_size,n_class,reset_gates,target_bands):
-        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"sunshine_{target_bands}")
+        self.results_saver = ResultsSaver(dataset_name,optimizer_name=f"retro_{target_bands}")#
 
         self.n_folds = n_folds
         self.display = display
@@ -84,8 +88,14 @@ class CrossValidator:
             (results[fold], gates_idx[fold],
             num_gates_prob_one[fold], num_gates_positive_prob[fold])\
                 = self.test(network, fold, testloader)
-            print(results[fold], gates_idx[fold])
-            gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
+            #TODO TEMP
+            print(results[fold])#, gates_idx[fold])
+            try:
+                gates_idx_all[fold] = torch.argmax(torch.Tensor(gates_idx[fold]),dim=1)#np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
+            except KeyboardInterrupt:
+                break
+            except Exception:
+                gates_idx_all[fold] = np.argwhere(np.array(gates_idx[fold])==1.0).flatten().tolist()
             #TODO- this should not stay, just a temp for running only one fold
             #break
 
@@ -170,7 +180,9 @@ class CrossValidator:
         gates = model.get_gates(mode="prob")
         if gates is None:
             return None, 0, 0
-        return gates, sum(gates == 1), sum(gates > 0)
+        #print("gates$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$",torch.argmax(torch.Tensor(gates),dim=1))
+        return gates,torch.argmax(torch.Tensor(gates)),torch.argmax(torch.Tensor(gates))
+        #return torch.argmax(torch.Tensor(gates)),0,0
 
     def train(self, net, optimizer, criterion, data_loader, epoch,
               fold=None,lam=0,display_iter=100,device=torch.device('cuda'), display=None,
@@ -198,10 +210,13 @@ class CrossValidator:
             supervision (optional): 'full' or 'semi'
         """
         optimizer = LDoG(net.parameters())#, reps_rel=1e-6)#
-        averager = None #PolynomialDecayAverager(net)
+        averager = None#PolynomialDecayAverager(net)
         #lr = 0.0005
         #lr= 0.0005
-        lr= 0.001
+        lr= 0.0001*20 #sess3
+        lr= 0.0001*35 #sess5
+        #THIS IS THE LR I USED FOR PAVIAU DATASET AND GUMBLE         lr= 0.0001*20
+        lr= 0.0001*20#15#25
         #lr = 0.002
         # optimizer_only_model= optim.Adam(list(net.parameters())[1:], lr=lr) #LDoG(list(net.parameters())[1:])#
         # averager_only_model = PolynomialDecayAverager({"parameters":list(net.parameters())[1:]})
@@ -214,19 +229,21 @@ class CrossValidator:
         # #lr = 0.00025
         # modified_lr = [
         #     {"params": list(net.parameters())[1:], "lr": lr},
-        #     {"params": list(net.parameters())[:1], "lr": 25 * lr},
+        #     {"params": list(net.parameters())[:1], "lr": 10 * lr},
         #    #{"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
         # ]
-        # optimizer = optim.Adam(modified_lr, lr=lr)
+        # optimizer = optim.Adam(modified_lr, lr=lr)#
+        #optimizer = optim.Adam([{"params": net.fs_params, "lr": lr}], lr=lr)
         optimizer = optim.Adam(net.parameters(), lr=lr)
-
+        scheduler = None#StepLR(optimizer, step_size=10, gamma=0.9)
         gates_progression = np.empty((N_BANDS,))
         if criterion is None:
             raise Exception("Missing criterion. You must specify a loss function.")
-
-        if hasattr(net, "set_fs_device"):
-            net.set_fs_device(device=device)
-
+        #
+        # if hasattr(net, "set_fs_device"):
+        #     net.set_fs_device(device=device)
+            
+        #net.load_state_dict(torch.load(PATH),strict=False)
         net.to(device)
 
         save_epoch = epoch // 20 if epoch > 20 else 1
@@ -241,39 +258,34 @@ class CrossValidator:
         loss_win, val_win = None, None
         val_accuracies = []
         train_accuracies = []
-
+        prev_gates=None
         for e in tqdm(range(1, epoch + 1), desc="Training the network"):
+            if scheduler is not None:
+                scheduler.step()
             #print(optimizer)
             #print(averager)
+            #print("e",e,"temp",net.feature_selector.temp)
             if e == self.reset_gates:
-                net.reset_gates()#
-                # modified_lr = [
-                #    {"params": list(net.parameters())[1:], "reps_rel":0.01},
-                #    {"params": list(net.parameters())[:1], "reps_rel":1e-10 },
-                # ]
-                # modified_lr = [
-                #    {"params": list(net.parameters())[1:], "lr": 0},
-                #    {"params": list(net.parameters())[:1], "lr": -math.log2(lr) * 2 * lr},
-                # ]
-                # optimizer = LDoG(net.parameters())  # , reps_rel=1e-6)#
-                #for param in list(net.parameters()[1:]):
-                #    param.grad = None
-                #optimizer = LDoG([{"params": list(net.feature_selector.parameters())}], reps_rel=1e-4)
-                optimizer  = optim.SGD([{"params": list(net.feature_selector.parameters())}],lr=0.01)
-                averager = None#PolynomialDecayAverager(net.feature_selector)
-                #modified_lr = [
-                #   {"params": list(net.parameters())[1:], "lr": lr},
-                #   {"params": list(net.parameters())[:1], "lr": -math.log(lr) * lr},
-                #]
-                #optimizer = optim.Adam(modified_lr, lr=lr)
-            if regu_weird:
-                regu_early_start = min(regu_early_start + regu_early_step, 1)
-                print("Discount factor=", regu_early_start)
+                #assuming the downstream model was the 0
+                #torch.save(net.state_dict(),PATH)
+                pass
+                #net.reset_gates()#
+                #optimizer = optim.Adam(net.parameters(), lr=lr)
+            #if regu_weird:
+            #    regu_early_start = min(regu_early_start + regu_early_step, 1)
+            #    print("Discount factor=", regu_early_start)
             # Set the network to training mode
+            print("hi")
             net.train()
             avg_loss = 0.
-            print(net.feature_selector.get_gates('prob'))
+            #print(net.feature_selector.get_gates('prob'))
             #print(net.feature_selector.get_gates('raw'))
+            curr = net.feature_selector.get_gates('raw')
+            if prev_gates is not None:
+                for i,sub in enumerate(prev_gates):
+                    print("diff:",curr[i]-sub)
+            prev_gates = curr
+            print("curr",curr)
             # Run the training loop for one epoch
             for batch_idx, (data, target) in tqdm(enumerate(data_loader), total=len(data_loader), disable=True):
                 if self.save_gates_progression and hasattr(net, "feature_selector"):
@@ -325,6 +337,7 @@ class CrossValidator:
                 # optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+                
                 if averager is not None:
                     averager.step()
 
@@ -337,11 +350,11 @@ class CrossValidator:
                 mean_corr[iter_] = np.mean(corr[max(0, iter_ - 100):iter_ + 1])
 
                 if display_iter and iter_ % display_iter == 0:
-                    string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f} Corr: {:.6f}'
+                    string = 'Train (epoch {}/{}) [{}/{} ({:.0f}%)]\tLoss: {:.6f} Regu: {:.6f} Corr: {:.6f} Temp: {:.6f}'
                     string = string.format(
                         e, epoch, batch_idx *
                                   len(data), len(data) * len(data_loader),
-                                  100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_], mean_corr[iter_])
+                                  100. * batch_idx / len(data_loader), mean_losses[iter_], mean_regs[iter_], mean_corr[iter_],net.feature_selector.temp if hasattr(net.feature_selector, "temp") else -1)
                     update = None if loss_win is None else 'append'
                     loss_win = display.line(
                         X=np.arange(iter_ - display_iter, iter_),

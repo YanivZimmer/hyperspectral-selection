@@ -101,8 +101,8 @@ class FeatureSelector(nn.Module):
         k = self.target_number# int(0.05 * stochastic_gate.shape[0])
         #topk = torch.topk(stochastic_gate, k,sorted = True).indices
         #topk = torch.sort(topk).values
-        topk = self.get_topk_stable(stochastic_gate,k)
-        #topk = self.get_topk_stable(z, k)
+        #topk = self.get_topk_stable(stochastic_gate,k)
+        topk = self.get_topk_stable(z, k)
         self.last_topk = topk
         #print(x.shape,'a')
         x = x[:, topk]
